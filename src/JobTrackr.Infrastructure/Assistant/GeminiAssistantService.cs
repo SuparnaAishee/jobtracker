@@ -294,8 +294,9 @@ public class GeminiAssistantService : IAssistantService
             required = new[] { "tailoredResume", "changes" }
         };
 
-        // Tailoring needs more output room than the default and benefits from lower temperature.
-        var json = await CallAsync(system, user, structuredSchema: schema, maxOutputTokens: 2500, temperature: 0.5, ct: ct);
+        // Tailoring needs the full configured output budget. A typical one-page
+        // resume + change log lands in 1.5-3k output tokens.
+        var json = await CallAsync(system, user, structuredSchema: schema, maxOutputTokens: null, temperature: 0.5, ct: ct);
         try
         {
             using var doc = JsonDocument.Parse(json);

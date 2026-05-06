@@ -415,14 +415,12 @@ function formatErr(err: unknown): string {
     if (err.status === 503) {
       const detail = (err.body?.detail ?? '').toLowerCase();
       if (detail.includes('quota') || detail.includes('exhausted'))
-        return 'Daily AI quota reached. Please try again tomorrow.';
-      if (detail.includes('busy') || detail.includes('temporarily') || detail.includes('503') || detail.includes('overload'))
-        return 'The AI is taking a short break. Please try again in a moment.';
+        return 'AI is resting for the day. Please try again in a few hours.';
       if (detail.includes('not configured') || detail.includes('not set'))
         return 'AI is not set up on the server yet.';
-      if (detail.includes('truncated'))
-        return 'The AI response was cut short. Try a shorter input or fewer questions.';
-      return 'AI is temporarily unavailable. Please try again shortly.';
+      // Everything else (transient overload, truncation, malformed response, network) maps
+      // to the same gentle "try again" message. Real cause is in server logs.
+      return 'AI is taking a short break. Please try again in a moment.';
     }
     if (err.status === 401) return 'Please sign in again.';
     if (err.status === 400) return err.body?.detail ?? 'Please check your inputs and try again.';
