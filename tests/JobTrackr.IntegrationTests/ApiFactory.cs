@@ -17,7 +17,7 @@ public class ApiFactory : WebApplicationFactory<Program>
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
-        builder.UseEnvironment("Development");
+        builder.UseEnvironment("Test");
 
         builder.ConfigureAppConfiguration((_, config) =>
         {
@@ -33,15 +33,18 @@ public class ApiFactory : WebApplicationFactory<Program>
 
         builder.ConfigureServices(services =>
         {
-            var dbContextDescriptor = services.SingleOrDefault(d =>
-                d.ServiceType == typeof(DbContextOptions<ApplicationDbContext>));
-            if (dbContextDescriptor is not null) services.Remove(dbContextDescriptor);
-
-            var dbContextScope = services.SingleOrDefault(d => d.ServiceType == typeof(ApplicationDbContext));
-            if (dbContextScope is not null) services.Remove(dbContextScope);
-
-            var appContextDescriptor = services.SingleOrDefault(d => d.ServiceType == typeof(IApplicationDbContext));
-            if (appContextDescriptor is not null) services.Remove(appContextDescriptor);
+            var efDescriptors = services
+                .Where(d =>
+                    d.ServiceType == typeof(DbContextOptions<ApplicationDbContext>) ||
+                    d.ServiceType == typeof(DbContextOptions) ||
+                    d.ServiceType == typeof(ApplicationDbContext) ||
+                    d.ServiceType == typeof(IApplicationDbContext) ||
+                    (d.ServiceType.FullName != null &&
+                     d.ServiceType.FullName.StartsWith("Microsoft.EntityFrameworkCore")) ||
+                    (d.ServiceType.FullName != null &&
+                     d.ServiceType.FullName.StartsWith("Npgsql.EntityFrameworkCore")))
+                .ToList();
+            foreach (var d in efDescriptors) services.Remove(d);
 
             services.AddDbContext<ApplicationDbContext>(options =>
                 options.UseInMemoryDatabase(_dbName));

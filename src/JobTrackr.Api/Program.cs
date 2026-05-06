@@ -44,16 +44,19 @@ builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSignalR();
 builder.Services.AddScoped<INotificationService, SignalRNotificationService>();
 
-// Hangfire — background jobs (storage in Postgres). Recurring jobs are scheduled
-// after the WebApplication is built (see below).
-var pgConn = builder.Configuration.GetConnectionString("Postgres")
-    ?? throw new InvalidOperationException("Connection string 'Postgres' is missing.");
-builder.Services.AddHangfire(c => c
-    .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
-    .UseSimpleAssemblyNameTypeSerializer()
-    .UseRecommendedSerializerSettings()
-    .UsePostgreSqlStorage(o => o.UseNpgsqlConnection(pgConn)));
-builder.Services.AddHangfireServer();
+// Hangfire — background jobs (storage in Postgres). Skipped in the Test
+// environment because integration tests use the EF InMemory provider.
+if (!builder.Environment.IsEnvironment("Test"))
+{
+    var pgConn = builder.Configuration.GetConnectionString("Postgres")
+        ?? throw new InvalidOperationException("Connection string 'Postgres' is missing.");
+    builder.Services.AddHangfire(c => c
+        .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
+        .UseSimpleAssemblyNameTypeSerializer()
+        .UseRecommendedSerializerSettings()
+        .UsePostgreSqlStorage(o => o.UseNpgsqlConnection(pgConn)));
+    builder.Services.AddHangfireServer();
+}
 builder.Services.PostConfigure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
 {
     options.Events ??= new JwtBearerEvents();
@@ -130,20 +133,22 @@ app.MapControllers();
 app.MapHub<NotificationsHub>("/hubs/notifications");
 app.MapGet("/health", () => Results.Ok(new { status = "ok" })).AllowAnonymous();
 
-// Hangfire dashboard at /hangfire — restricted to localhost for safety
-// (since this app uses JWT, not cookies, the default cookie-auth dashboard
-// filter wouldn't work; localhost-only is the simplest portfolio-grade guard).
-app.UseHangfireDashboard("/hangfire", new DashboardOptions
+if (!app.Environment.IsEnvironment("Test"))
 {
-    Authorization = new[] { new AllowAllInDevDashboardFilter(app.Environment) },
-    DashboardTitle = "JobTrackr — background jobs"
-});
+    // Hangfire dashboard at /hangfire. Since this app uses JWT (not cookies),
+    // the default cookie-auth dashboard filter wouldn't work; localhost-only
+    // is the simplest portfolio-grade guard.
+    app.UseHangfireDashboard("/hangfire", new DashboardOptions
+    {
+        Authorization = new[] { new AllowAllInDevDashboardFilter(app.Environment) },
+        DashboardTitle = "JobTrackr background jobs"
+    });
 
-// Recurring job: scan for stale Applied/Screening apps every day at 09:00 UTC.
-RecurringJob.AddOrUpdate<FollowUpReminderJob>(
-    "follow-up-reminders",
-    job => job.RunAsync(CancellationToken.None),
-    "0 9 * * *");
+    RecurringJob.AddOrUpdate<FollowUpReminderJob>(
+        "follow-up-reminders",
+        job => job.RunAsync(CancellationToken.None),
+        "0 9 * * *");
+}
 
 app.Run();
 
