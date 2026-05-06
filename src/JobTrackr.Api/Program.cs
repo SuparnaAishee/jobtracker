@@ -17,6 +17,20 @@ AppContext.SetSwitch("Npgsql.EnableLegacyTimestampBehavior", true);
 
 var builder = WebApplication.CreateBuilder(args);
 
+if (Environment.GetEnvironmentVariable("SUPABASE_DB_HOST") is { Length: > 0 } supabaseHost)
+{
+    var port = Environment.GetEnvironmentVariable("SUPABASE_DB_PORT") ?? "5432";
+    var db = Environment.GetEnvironmentVariable("SUPABASE_DB_NAME") ?? "postgres";
+    var user = Environment.GetEnvironmentVariable("SUPABASE_DB_USER")
+        ?? throw new InvalidOperationException("SUPABASE_DB_USER is required when SUPABASE_DB_HOST is set.");
+    var password = Environment.GetEnvironmentVariable("SUPABASE_DB_PASSWORD")
+        ?? throw new InvalidOperationException("SUPABASE_DB_PASSWORD is required when SUPABASE_DB_HOST is set.");
+
+    builder.Configuration["ConnectionStrings:Postgres"] =
+        $"Host={supabaseHost};Port={port};Database={db};Username={user};Password={password};" +
+        "SSL Mode=Require;Trust Server Certificate=true;Pooling=true;Maximum Pool Size=20";
+}
+
 builder.Host.UseSerilog((ctx, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
     .Enrich.FromLogContext()

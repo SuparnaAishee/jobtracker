@@ -23,7 +23,8 @@ services:
       - key: STORAGE_ROOT
         value: /var/jobtrackr/uploads
 
-      # Supabase Postgres — paste from your Supabase dashboard
+      # Supabase Postgres. The API builds the connection string from these
+      # at startup (see Program.cs).
       - key: SUPABASE_DB_HOST
         sync: false
       - key: SUPABASE_DB_PORT
@@ -34,11 +35,6 @@ services:
         sync: false
       - key: SUPABASE_DB_PASSWORD
         sync: false
-
-      # The API constructs ConnectionStrings__Postgres from the SUPABASE_DB_* vars.
-      # Render expands ${VAR} references at runtime.
-      - key: ConnectionStrings__Postgres
-        value: "Host=${SUPABASE_DB_HOST};Port=${SUPABASE_DB_PORT};Database=${SUPABASE_DB_NAME};Username=${SUPABASE_DB_USER};Password=${SUPABASE_DB_PASSWORD};SSL Mode=Require;Trust Server Certificate=true;Pooling=true;Maximum Pool Size=20"
 
       # JWT
       - key: Jwt__Issuer
