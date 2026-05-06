@@ -1,0 +1,48 @@
+# Build outputs
+bin/
+obj/
+out/
+publish/
+artifacts/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Test results
+TestResults/
+*.trx
+*.coverage
+coverage/
+
+# .NET
+project.lock.json
+project.fragment.lock.json
+.dotnet/
+
+# Rider
+.idea/
+
+# Resharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+
+# OS
+.DS_Store
+Thumbs.db
+
+# User secrets / env — keep .env.example tracked, ignore real secrets
+.env
+.env.local
+.env.*.local
+appsettings.*.local.json
+secrets.json
+
+# Personal learning notes & interview prep — not part of the project
+LEARN.md
+INTERVIEW_QA.md

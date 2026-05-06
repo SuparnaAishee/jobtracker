@@ -1,0 +1,74 @@
+# Render Blueprint — one-click deploy of JobTrackr.
+# How to use:
+#   1. Push this repo to GitHub (private or public).
+#   2. https://render.com → "New" → "Blueprint" → connect this repo.
+#   3. Render reads this file and creates two services. Free plan works for both.
+#   4. After the services are created, set the secrets marked `sync: false` below
+#      in each service's Environment tab in the Render dashboard.
+#   5. After the API service has its public URL, set the web service's
+#      VITE_API_URL env var to that URL and trigger a manual rebuild.
+
+services:
+  - type: web
+    name: jobtrackr-api
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    envVars:
+      - key: ASPNETCORE_ENVIRONMENT
+        value: Production
+      - key: ASPNETCORE_URLS
+        value: http://+:8080
+      - key: STORAGE_ROOT
+        value: /var/jobtrackr/uploads
+
+      # Supabase Postgres — paste from your Supabase dashboard
+      - key: SUPABASE_DB_HOST
+        sync: false
+      - key: SUPABASE_DB_PORT
+        value: "5432"
+      - key: SUPABASE_DB_NAME
+        value: postgres
+      - key: SUPABASE_DB_USER
+        sync: false
+      - key: SUPABASE_DB_PASSWORD
+        sync: false
+
+      # The API constructs ConnectionStrings__Postgres from the SUPABASE_DB_* vars.
+      # Render expands ${VAR} references at runtime.
+      - key: ConnectionStrings__Postgres
+        value: "Host=${SUPABASE_DB_HOST};Port=${SUPABASE_DB_PORT};Database=${SUPABASE_DB_NAME};Username=${SUPABASE_DB_USER};Password=${SUPABASE_DB_PASSWORD};SSL Mode=Require;Trust Server Certificate=true;Pooling=true;Maximum Pool Size=20"
+
+      # JWT
+      - key: Jwt__Issuer
+        value: JobTrackr
+      - key: Jwt__Audience
+        value: JobTrackr.Clients
+      - key: Jwt__Key
+        generateValue: true
+      - key: Jwt__ExpiresInMinutes
+        value: "60"
+
+      # Gemini — paste your free key from https://aistudio.google.com/apikey
+      - key: Gemini__ApiKey
+        sync: false
+      - key: Gemini__Model
+        value: gemini-2.5-flash
+      - key: Gemini__MaxOutputTokens
+        value: "1500"
+      - key: Gemini__Temperature
+        value: "0.7"
+
+  - type: web
+    name: jobtrackr-web
+    runtime: docker
+    plan: free
+    rootDir: client
+    dockerfilePath: ./Dockerfile
+    envVars:
+      # Set after the API service has its public URL
+      # (e.g. https://jobtrackr-api.onrender.com — DO NOT include trailing slash).
+      # Render passes this as a Docker build arg via the VITE_API_URL ARG in client/Dockerfile.
+      - key: VITE_API_URL
+        sync: false

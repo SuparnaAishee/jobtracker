@@ -1,0 +1,96 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  html.dark {
+    color-scheme: dark;
+  }
+  html {
+    font-family: theme('fontFamily.sans');
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+  body {
+    @apply bg-ink-50 text-ink-900 antialiased transition-colors duration-200;
+  }
+  html.dark body {
+    @apply bg-ink-950 text-ink-100;
+  }
+
+  /* Better focus visibility — replaces default browser ring with a subtle accent ring */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-accent-500/60 ring-offset-2 ring-offset-white;
+  }
+  html.dark *:focus-visible {
+    @apply ring-offset-ink-950;
+  }
+
+  /* Refined scrollbars */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-ink-200;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-300;
+  }
+  html.dark ::-webkit-scrollbar-thumb {
+    @apply bg-ink-800;
+  }
+  html.dark ::-webkit-scrollbar-thumb:hover {
+    @apply bg-ink-700;
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-white/70 backdrop-blur-md;
+  }
+  .dark .glass {
+    @apply bg-ink-900/70;
+  }
+
+  .input {
+    @apply block w-full rounded-md border border-ink-200 bg-white px-3 py-2 text-sm text-ink-900 transition-colors placeholder:text-ink-400 focus:border-accent-500 focus:outline-none focus:ring-1 focus:ring-accent-500;
+  }
+  .dark .input {
+    @apply border-ink-800 bg-ink-900 text-ink-100 placeholder:text-ink-500 focus:border-accent-500;
+  }
+
+  .card {
+    @apply rounded-xl border border-ink-200 bg-white shadow-soft transition-colors;
+  }
+  .dark .card {
+    @apply border-ink-800 bg-ink-900;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md bg-ink-900 px-4 py-2 text-sm font-medium text-white shadow-soft transition-all duration-150 hover:-translate-y-px hover:bg-ink-800 hover:shadow-lift focus-visible:ring-accent-500 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:translate-y-0;
+  }
+  .dark .btn-primary {
+    @apply bg-accent-500 text-white shadow-glow hover:bg-accent-400;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 rounded-md border border-ink-200 bg-white px-3 py-1.5 text-sm font-medium text-ink-700 transition-colors hover:bg-ink-50;
+  }
+  .dark .btn-ghost {
+    @apply border-ink-800 bg-ink-900 text-ink-200 hover:bg-ink-850;
+  }
+
+  .label {
+    @apply mb-1 block text-xs font-medium uppercase tracking-wide text-ink-500;
+  }
+  .dark .label {
+    @apply text-ink-400;
+  }
+}

@@ -1,0 +1,15 @@
+**/bin
+**/obj
+**/.vs
+**/.idea
+**/.vscode
+**/.git
+**/.github
+**/*.user
+**/*.suo
+**/TestResults
+**/Properties/launchSettings.json
+.dockerignore
+Dockerfile
+docker-compose*.yml
+README.md
