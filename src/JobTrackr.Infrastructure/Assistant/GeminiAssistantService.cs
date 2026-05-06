@@ -1,5 +1,6 @@
 using JobTrackr.Application.Assistant.Dtos;
 using JobTrackr.Application.Assistant.Services;
+using JobTrackr.Application.Common.Exceptions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
@@ -360,7 +361,7 @@ public class GeminiAssistantService : IAssistantService
             _exhausted.Clear();
         }
 
-        Exception? lastException = null;
+        var lastUpstreamStatus = 0;
         foreach (var keyIndex in attemptOrder)
         {
             using var req = new HttpRequestMessage(HttpMethod.Post, url)
@@ -372,6 +373,7 @@ public class GeminiAssistantService : IAssistantService
 
             using var resp = await _http.SendAsync(req, ct);
             var raw = await resp.Content.ReadAsStringAsync(ct);
+            lastUpstreamStatus = (int)resp.StatusCode;
 
             if (resp.IsSuccessStatusCode)
                 return ExtractText(raw);
@@ -380,15 +382,18 @@ public class GeminiAssistantService : IAssistantService
             {
                 _exhausted[keyIndex] = DateTimeOffset.UtcNow.Add(ExhaustionWindow);
                 _logger.LogWarning("Gemini key #{Index} exhausted (status {Status}). Rotating.", keyIndex + 1, (int)resp.StatusCode);
-                lastException = new InvalidOperationException($"Quota error on key #{keyIndex + 1}.");
                 continue;
             }
 
             _logger.LogError("Gemini API error {Status} (key #{Index}): {Body}", resp.StatusCode, keyIndex + 1, raw);
-            throw new InvalidOperationException($"Assistant call failed ({(int)resp.StatusCode}). See server logs.");
+            throw new AssistantUnavailableException(
+                $"Gemini returned {(int)resp.StatusCode}. Check the API key and the server logs.");
         }
 
-        throw lastException ?? new InvalidOperationException("All Gemini keys are exhausted.");
+        throw new AssistantUnavailableException(
+            lastUpstreamStatus == 0
+                ? "All configured Gemini API keys appear exhausted. Try again later or add another key to GEMINI_API_KEYS."
+                : $"All Gemini keys exhausted (last status {lastUpstreamStatus}). Add another key to GEMINI_API_KEYS.");
     }
 
     private bool IsKeyUsable(int index) =>

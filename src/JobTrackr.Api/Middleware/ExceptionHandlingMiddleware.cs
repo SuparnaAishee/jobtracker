@@ -58,6 +58,15 @@ public class ExceptionHandlingMiddleware
                     Status = (int)HttpStatusCode.Unauthorized,
                     Type = "https://tools.ietf.org/html/rfc7235#section-3.1"
                 }),
+            AssistantUnavailableException => (
+                HttpStatusCode.ServiceUnavailable,
+                new ProblemDetails
+                {
+                    Title = "AI assistant temporarily unavailable",
+                    Detail = ex.Message,
+                    Status = (int)HttpStatusCode.ServiceUnavailable,
+                    Type = "https://tools.ietf.org/html/rfc7231#section-6.6.4"
+                }),
             _ => (
                 HttpStatusCode.InternalServerError,
                 new ProblemDetails
