@@ -51,6 +51,18 @@ foreach (var (envName, configKey) in new[]
         builder.Configuration[configKey] = value;
 }
 
+// Comma-separated list of Gemini API keys. The service rotates through them on
+// 429/RESOURCE_EXHAUSTED so a portfolio demo never hits a hard quota wall.
+var geminiKeysEnv = Environment.GetEnvironmentVariable("GEMINI_API_KEYS");
+if (!string.IsNullOrWhiteSpace(geminiKeysEnv))
+{
+    var keys = geminiKeysEnv
+        .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+        .ToArray();
+    for (var i = 0; i < keys.Length; i++)
+        builder.Configuration[$"Gemini:ApiKeys:{i}"] = keys[i];
+}
+
 builder.Host.UseSerilog((ctx, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
     .Enrich.FromLogContext()

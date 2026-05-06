@@ -46,7 +46,11 @@ services:
       - key: Jwt__ExpiresInMinutes
         value: "60"
 
-      # Gemini — paste your free key from https://aistudio.google.com/apikey
+      # Gemini — paste your free key from https://aistudio.google.com/apikey.
+      # GEMINI_API_KEYS accepts a comma-separated list to rotate when one key
+      # hits its daily quota; set GEMINI_API_KEY for a single-key setup.
+      - key: GEMINI_API_KEYS
+        sync: false
       - key: Gemini__ApiKey
         sync: false
       - key: Gemini__Model

@@ -2,6 +2,8 @@ using JobTrackr.Application.Assistant.Dtos;
 using JobTrackr.Application.Assistant.Services;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Collections.Concurrent;
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -11,10 +13,15 @@ namespace JobTrackr.Infrastructure.Assistant;
 public class GeminiAssistantService : IAssistantService
 {
     private const string EndpointBase = "https://generativelanguage.googleapis.com/v1beta/models";
+    private static readonly TimeSpan ExhaustionWindow = TimeSpan.FromHours(24);
 
     private readonly HttpClient _http;
     private readonly GeminiSettings _settings;
     private readonly ILogger<GeminiAssistantService> _logger;
+    private readonly List<string> _apiKeys;
+
+    // keyIndex -> moment after which the key is considered usable again
+    private readonly ConcurrentDictionary<int, DateTimeOffset> _exhausted = new();
 
     public GeminiAssistantService(
         HttpClient http,
@@ -24,9 +31,16 @@ public class GeminiAssistantService : IAssistantService
         _http = http;
         _settings = options.Value;
         _logger = logger;
+
+        _apiKeys = _settings.ApiKeys
+            .Concat(string.IsNullOrWhiteSpace(_settings.ApiKey) ? Array.Empty<string>() : new[] { _settings.ApiKey })
+            .Where(k => !string.IsNullOrWhiteSpace(k))
+            .Select(k => k.Trim())
+            .Distinct()
+            .ToList();
     }
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(_settings.ApiKey);
+    public bool IsConfigured => _apiKeys.Count > 0;
 
     public async Task<AnalyzeJdResponse> AnalyzeJobDescriptionAsync(AnalyzeJdRequest request, CancellationToken ct = default)
     {
@@ -39,7 +53,7 @@ public class GeminiAssistantService : IAssistantService
             Ground every claim in the resume text. If no resume is provided, output strengths=[] and base gaps/keywords on the JD alone.
             """;
 
-        var user = $"Job description:\n{request.JobDescription}\n\nResume:\n{request.Resume ?? "(not provided)"}";
+        var user = $"Job description:\n{Truncate(request.JobDescription, 3000)}\n\nResume:\n{Truncate(request.Resume, 5000) ?? "(not provided)"}";
 
         var schema = new
         {
@@ -55,7 +69,7 @@ public class GeminiAssistantService : IAssistantService
             required = new[] { "fitScore", "strengths", "gaps", "suggestedKeywords", "summary" }
         };
 
-        var json = await CallAsync(system, user, structuredSchema: schema, ct: ct);
+        var json = await CallAsync(system, user, structuredSchema: schema, maxOutputTokens: null, temperature: null, ct: ct);
         try
         {
             using var doc = JsonDocument.Parse(json);
@@ -84,13 +98,13 @@ public class GeminiAssistantService : IAssistantService
             Write a {tone} cover letter for {request.Position} at {request.CompanyName}.
 
             Job description:
-            {request.JobDescription}
+            {Truncate(request.JobDescription, 3000)}
 
             Resume:
-            {request.Resume}
+            {Truncate(request.Resume, 5000)}
             """;
 
-        var letter = await CallAsync(system, user, structuredSchema: null, ct: ct);
+        var letter = await CallAsync(system, user, structuredSchema: null, maxOutputTokens: null, temperature: null, ct: ct);
         return new CoverLetterResponse(letter.Trim());
     }
 
@@ -121,12 +135,12 @@ public class GeminiAssistantService : IAssistantService
 
         var user = $"""
             Job description:
-            {request.JobDescription}
+            {Truncate(request.JobDescription, 3000)}
 
             Role hint: {(string.IsNullOrWhiteSpace(request.Role) ? "(infer from JD)" : request.Role)}
 
             Resume:
-            {(string.IsNullOrWhiteSpace(request.Resume) ? "(not provided)" : request.Resume)}
+            {(string.IsNullOrWhiteSpace(request.Resume) ? "(not provided)" : Truncate(request.Resume, 5000))}
             """;
 
         var schema = new
@@ -154,7 +168,7 @@ public class GeminiAssistantService : IAssistantService
             required = new[] { "questions" }
         };
 
-        var json = await CallAsync(system, user, structuredSchema: schema, ct: ct);
+        var json = await CallAsync(system, user, structuredSchema: schema, maxOutputTokens: null, temperature: null, ct: ct);
         try
         {
             using var doc = JsonDocument.Parse(json);
@@ -200,10 +214,10 @@ public class GeminiAssistantService : IAssistantService
             {request.UserAnswer}
 
             Job description (context, may be empty):
-            {request.JobDescription ?? "(not provided)"}
+            {Truncate(request.JobDescription, 3000) ?? "(not provided)"}
 
             Resume (context, may be empty):
-            {request.Resume ?? "(not provided)"}
+            {Truncate(request.Resume, 5000) ?? "(not provided)"}
             """;
 
         var schema = new
@@ -219,7 +233,7 @@ public class GeminiAssistantService : IAssistantService
             required = new[] { "score", "strengths", "improvements", "modelAnswer" }
         };
 
-        var json = await CallAsync(system, user, structuredSchema: schema, ct: ct);
+        var json = await CallAsync(system, user, structuredSchema: schema, maxOutputTokens: null, temperature: null, ct: ct);
         try
         {
             using var doc = JsonDocument.Parse(json);
@@ -237,18 +251,85 @@ public class GeminiAssistantService : IAssistantService
         }
     }
 
+    public async Task<TailorResumeResponse> TailorResumeAsync(TailorResumeRequest request, CancellationToken ct = default)
+    {
+        EnsureConfigured();
+
+        var system = """
+            You rewrite resumes to better match a target job description without inventing experience.
+            Rules:
+            1. Preserve every employer, role, date, and project from the original resume.
+            2. Reword bullets to surface skills and accomplishments that align with the JD's keywords.
+            3. Reorder bullets so the most JD-relevant ones come first.
+            4. Add a short "Professional Summary" section at the top tailored to this role.
+            5. Never fabricate technologies, certifications, metrics, or job titles.
+
+            Output ONLY a JSON object matching:
+            {
+              "tailoredResume": "<the rewritten resume in clean Markdown, with ## section headings>",
+              "changes": [<3-7 short bullets describing what you changed and why>]
+            }
+            """;
+
+        var user = $"""
+            Target job description:
+            {Truncate(request.JobDescription, 3000)}
+
+            Original resume:
+            {Truncate(request.Resume, 5000)}
+            """;
+
+        var schema = new
+        {
+            type = "object",
+            properties = new
+            {
+                tailoredResume = new { type = "string" },
+                changes = new { type = "array", items = new { type = "string" } }
+            },
+            required = new[] { "tailoredResume", "changes" }
+        };
+
+        // Tailoring needs more output room than the default and benefits from lower temperature.
+        var json = await CallAsync(system, user, structuredSchema: schema, maxOutputTokens: 2500, temperature: 0.5, ct: ct);
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            return new TailorResumeResponse(
+                TailoredResume: root.GetProperty("tailoredResume").GetString() ?? "",
+                Changes: root.GetProperty("changes").EnumerateArray().Select(e => e.GetString() ?? "").ToList());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to parse tailor-resume response. Body: {Body}", json);
+            throw new InvalidOperationException("Assistant returned an unexpected response.");
+        }
+    }
+
     private void EnsureConfigured()
     {
         if (!IsConfigured)
             throw new InvalidOperationException("GEMINI_API_KEY not set.");
     }
 
-    private async Task<string> CallAsync(string system, string user, object? structuredSchema, CancellationToken ct)
+    private static string? Truncate(string? input, int max) =>
+        string.IsNullOrEmpty(input) || input.Length <= max
+            ? input
+            : input.Substring(0, max);
+
+    private async Task<string> CallAsync(
+        string system,
+        string user,
+        object? structuredSchema,
+        int? maxOutputTokens,
+        double? temperature,
+        CancellationToken ct)
     {
         var generationConfig = new Dictionary<string, object?>
         {
-            ["maxOutputTokens"] = _settings.MaxOutputTokens,
-            ["temperature"] = _settings.Temperature
+            ["maxOutputTokens"] = maxOutputTokens ?? _settings.MaxOutputTokens,
+            ["temperature"] = temperature ?? _settings.Temperature
         };
         if (structuredSchema is not null)
         {
@@ -267,22 +348,62 @@ public class GeminiAssistantService : IAssistantService
         };
 
         var url = $"{EndpointBase}/{Uri.EscapeDataString(_settings.Model)}:generateContent";
-        using var req = new HttpRequestMessage(HttpMethod.Post, url)
-        {
-            Content = JsonContent.Create(body)
-        };
-        req.Headers.Add("x-goog-api-key", _settings.ApiKey);
-        req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-        using var resp = await _http.SendAsync(req, ct);
-        var raw = await resp.Content.ReadAsStringAsync(ct);
+        var attemptOrder = Enumerable.Range(0, _apiKeys.Count)
+            .Where(IsKeyUsable)
+            .ToList();
 
-        if (!resp.IsSuccessStatusCode)
+        if (attemptOrder.Count == 0)
         {
-            _logger.LogError("Gemini API error {Status}: {Body}", resp.StatusCode, raw);
+            // Every key is exhausted. Fall through and try them all anyway — quotas may have reset.
+            attemptOrder = Enumerable.Range(0, _apiKeys.Count).ToList();
+            _exhausted.Clear();
+        }
+
+        Exception? lastException = null;
+        foreach (var keyIndex in attemptOrder)
+        {
+            using var req = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = JsonContent.Create(body)
+            };
+            req.Headers.Add("x-goog-api-key", _apiKeys[keyIndex]);
+            req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+
+            using var resp = await _http.SendAsync(req, ct);
+            var raw = await resp.Content.ReadAsStringAsync(ct);
+
+            if (resp.IsSuccessStatusCode)
+                return ExtractText(raw);
+
+            if (IsQuotaError(resp.StatusCode, raw))
+            {
+                _exhausted[keyIndex] = DateTimeOffset.UtcNow.Add(ExhaustionWindow);
+                _logger.LogWarning("Gemini key #{Index} exhausted (status {Status}). Rotating.", keyIndex + 1, (int)resp.StatusCode);
+                lastException = new InvalidOperationException($"Quota error on key #{keyIndex + 1}.");
+                continue;
+            }
+
+            _logger.LogError("Gemini API error {Status} (key #{Index}): {Body}", resp.StatusCode, keyIndex + 1, raw);
             throw new InvalidOperationException($"Assistant call failed ({(int)resp.StatusCode}). See server logs.");
         }
 
+        throw lastException ?? new InvalidOperationException("All Gemini keys are exhausted.");
+    }
+
+    private bool IsKeyUsable(int index) =>
+        !_exhausted.TryGetValue(index, out var until) || until <= DateTimeOffset.UtcNow;
+
+    private static bool IsQuotaError(HttpStatusCode status, string body)
+    {
+        if (status == HttpStatusCode.TooManyRequests) return true;
+        if (status == HttpStatusCode.Forbidden && body.Contains("RESOURCE_EXHAUSTED", StringComparison.OrdinalIgnoreCase))
+            return true;
+        return false;
+    }
+
+    private string ExtractText(string raw)
+    {
         using var doc = JsonDocument.Parse(raw);
         if (!doc.RootElement.TryGetProperty("candidates", out var candidates) || candidates.GetArrayLength() == 0)
         {

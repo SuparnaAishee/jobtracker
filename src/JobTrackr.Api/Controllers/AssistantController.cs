@@ -66,6 +66,20 @@ public class AssistantController : ControllerBase
         return Ok(await _assistant.GenerateInterviewQuestionsAsync(request, ct));
     }
 
+    /// <summary>Rewrite a resume to better target a specific job description.</summary>
+    [HttpPost("tailor-resume")]
+    [ProducesResponseType(typeof(TailorResumeResponse), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status503ServiceUnavailable)]
+    public async Task<ActionResult<TailorResumeResponse>> TailorResume(
+        [FromBody] TailorResumeRequest request, CancellationToken ct)
+    {
+        if (!_assistant.IsConfigured)
+            return ServiceUnavailable("AI assistant is not configured. Ask the operator to set GEMINI_API_KEY.");
+        if (string.IsNullOrWhiteSpace(request.Resume) || string.IsNullOrWhiteSpace(request.JobDescription))
+            return BadRequest(new { detail = "Resume and JobDescription are required." });
+        return Ok(await _assistant.TailorResumeAsync(request, ct));
+    }
+
     /// <summary>Grade a candidate's answer to an interview question.</summary>
     [HttpPost("grade-answer")]
     [ProducesResponseType(typeof(GradeAnswerResponse), StatusCodes.Status200OK)]

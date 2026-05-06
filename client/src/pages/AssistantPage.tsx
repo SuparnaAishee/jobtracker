@@ -19,6 +19,10 @@ export function AssistantPage() {
   const [letter, setLetter] = useState<string | null>(null);
   const [letterError, setLetterError] = useState<string | null>(null);
 
+  const [tailoring, setTailoring] = useState(false);
+  const [tailored, setTailored] = useState<assistant.TailorResumeResponse | null>(null);
+  const [tailorError, setTailorError] = useState<string | null>(null);
+
   useEffect(() => {
     assistant.status().then((s) => setConfigured(s.configured)).catch(() => setConfigured(false));
   }, []);
@@ -35,6 +39,31 @@ export function AssistantPage() {
     } finally {
       setAnalyzing(false);
     }
+  };
+
+  const runTailor = async () => {
+    setTailoring(true);
+    setTailorError(null);
+    setTailored(null);
+    try {
+      const res = await assistant.tailorResume({ resume, jobDescription });
+      setTailored(res);
+    } catch (err) {
+      setTailorError(formatErr(err));
+    } finally {
+      setTailoring(false);
+    }
+  };
+
+  const downloadTailored = () => {
+    if (!tailored) return;
+    const blob = new Blob([tailored.tailoredResume], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'tailored-resume.md';
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   const runLetter = async () => {
@@ -126,6 +155,13 @@ export function AssistantPage() {
               >
                 {drafting ? 'Drafting…' : 'Draft cover letter'}
               </button>
+              <button
+                onClick={runTailor}
+                disabled={tailoring || !configured || !jobDescription.trim() || !resume.trim()}
+                className="btn-ghost"
+              >
+                {tailoring ? 'Tailoring…' : 'Tailor my resume'}
+              </button>
             </div>
           </div>
         </div>
@@ -142,6 +178,50 @@ export function AssistantPage() {
               <p className="text-sm text-ink-500 dark:text-ink-500">Run an analysis to see a fit score, strengths, and gaps.</p>
             )}
             {analysis && <AnalysisView a={analysis} />}
+          </div>
+
+          <div className="card p-6">
+            <h2 className="mb-4 text-lg font-semibold text-ink-900 dark:text-ink-50">Tailored resume</h2>
+            {tailorError && (
+              <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300">
+                {tailorError}
+              </div>
+            )}
+            {!tailored && !tailorError && (
+              <p className="text-sm text-ink-500 dark:text-ink-500">
+                Paste a JD and your resume, then click <b>Tailor my resume</b>. The AI will reorder and reword bullets to match the JD&rsquo;s keywords without inventing experience.
+              </p>
+            )}
+            {tailored && (
+              <div className="space-y-4">
+                {tailored.changes.length > 0 && (
+                  <div>
+                    <div className="mb-1 text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-ink-400">
+                      What changed
+                    </div>
+                    <ul className="space-y-1.5 text-sm">
+                      {tailored.changes.map((c, i) => (
+                        <li key={i} className="flex gap-2">
+                          <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-accent-500" />
+                          <span className="text-ink-700 dark:text-ink-300">{c}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded-md bg-ink-50 p-4 font-mono text-xs text-ink-800 dark:bg-ink-950 dark:text-ink-200">
+                  {tailored.tailoredResume}
+                </pre>
+                <div className="flex justify-end gap-2">
+                  <button onClick={() => navigator.clipboard.writeText(tailored.tailoredResume)} className="btn-ghost">
+                    Copy
+                  </button>
+                  <button onClick={downloadTailored} className="btn-primary">
+                    Download .md
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="card p-6">

@@ -38,3 +38,9 @@ public record GradeAnswerResponse(
     IReadOnlyList<string> Strengths,
     IReadOnlyList<string> Improvements,
     string ModelAnswer);
+
+public record TailorResumeRequest(string Resume, string JobDescription);
+
+public record TailorResumeResponse(
+    string TailoredResume,
+    IReadOnlyList<string> Changes);

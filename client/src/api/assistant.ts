@@ -53,6 +53,15 @@ export interface GradeAnswerResponse {
   modelAnswer: string;
 }
 
+export interface TailorResumeRequest {
+  resume: string;
+  jobDescription: string;
+}
+export interface TailorResumeResponse {
+  tailoredResume: string;
+  changes: string[];
+}
+
 export const status = () => apiFetch<AssistantStatus>('/api/assistant/status');
 export const analyze = (body: AnalyzeJdRequest) =>
   apiFetch<AnalyzeJdResponse>('/api/assistant/analyze-jd', {
@@ -71,6 +80,11 @@ export const interviewQuestions = (body: InterviewQuestionsRequest) =>
   });
 export const gradeAnswer = (body: GradeAnswerRequest) =>
   apiFetch<GradeAnswerResponse>('/api/assistant/grade-answer', {
+    method: 'POST',
+    body: JSON.stringify(body)
+  });
+export const tailorResume = (body: TailorResumeRequest) =>
+  apiFetch<TailorResumeResponse>('/api/assistant/tailor-resume', {
     method: 'POST',
     body: JSON.stringify(body)
   });

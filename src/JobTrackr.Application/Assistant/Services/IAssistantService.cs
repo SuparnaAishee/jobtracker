@@ -9,4 +9,5 @@ public interface IAssistantService
     Task<CoverLetterResponse> GenerateCoverLetterAsync(CoverLetterRequest request, CancellationToken ct = default);
     Task<InterviewQuestionsResponse> GenerateInterviewQuestionsAsync(InterviewQuestionsRequest request, CancellationToken ct = default);
     Task<GradeAnswerResponse> GradeAnswerAsync(GradeAnswerRequest request, CancellationToken ct = default);
+    Task<TailorResumeResponse> TailorResumeAsync(TailorResumeRequest request, CancellationToken ct = default);
 }

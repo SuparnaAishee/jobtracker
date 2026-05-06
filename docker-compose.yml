@@ -15,6 +15,7 @@ services:
       Jwt__Key: ${JWT_KEY}
       Jwt__ExpiresInMinutes: ${JWT_EXPIRES_IN_MINUTES}
       Gemini__ApiKey: ${GEMINI_API_KEY}
+      GEMINI_API_KEYS: ${GEMINI_API_KEYS:-}
       Gemini__Model: ${GEMINI_MODEL}
       Gemini__MaxOutputTokens: ${GEMINI_MAX_OUTPUT_TOKENS}
       Gemini__Temperature: ${GEMINI_TEMPERATURE}
