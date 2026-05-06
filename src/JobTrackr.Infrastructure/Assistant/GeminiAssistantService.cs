@@ -396,10 +396,16 @@ public class GeminiAssistantService : IAssistantService
             if (resp.IsSuccessStatusCode)
                 return ExtractText(raw);
 
-            if (IsQuotaError(resp.StatusCode, raw))
+            if (IsHardQuotaError(resp.StatusCode, raw))
             {
                 _exhausted[keyIndex] = DateTimeOffset.UtcNow.Add(ExhaustionWindow);
-                _logger.LogWarning("Gemini key #{Index} exhausted (status {Status}). Rotating.", keyIndex + 1, (int)resp.StatusCode);
+                _logger.LogWarning("Gemini key #{Index} hit daily quota (status {Status}). Rotating.", keyIndex + 1, (int)resp.StatusCode);
+                continue;
+            }
+
+            if (IsTransientError(resp.StatusCode))
+            {
+                _logger.LogWarning("Gemini transient error (status {Status}) on key #{Index}. Rotating.", (int)resp.StatusCode, keyIndex + 1);
                 continue;
             }
 
@@ -409,21 +415,30 @@ public class GeminiAssistantService : IAssistantService
         }
 
         throw new AssistantUnavailableException(
-            lastUpstreamStatus == 0
-                ? "All configured Gemini API keys appear exhausted. Try again later or add another key to GEMINI_API_KEYS."
-                : $"All Gemini keys exhausted (last status {lastUpstreamStatus}). Add another key to GEMINI_API_KEYS.");
+            lastUpstreamStatus switch
+            {
+                0 => "All Gemini keys are temporarily unavailable. Try again in a moment.",
+                429 or 403 => "All Gemini keys hit their daily quota. Try again tomorrow or add another key.",
+                503 or 502 or 504 => "The AI provider is busy right now. Try again in a moment.",
+                _ => $"AI provider error (status {lastUpstreamStatus}). Try again in a moment."
+            });
     }
 
     private bool IsKeyUsable(int index) =>
         !_exhausted.TryGetValue(index, out var until) || until <= DateTimeOffset.UtcNow;
 
-    private static bool IsQuotaError(HttpStatusCode status, string body)
-    {
-        if (status == HttpStatusCode.TooManyRequests) return true;
-        if (status == HttpStatusCode.Forbidden && body.Contains("RESOURCE_EXHAUSTED", StringComparison.OrdinalIgnoreCase))
-            return true;
-        return false;
-    }
+    // Hard quota: this key is done for the day. Mark it exhausted for 24h.
+    private static bool IsHardQuotaError(HttpStatusCode status, string body) =>
+        status == HttpStatusCode.TooManyRequests ||
+        (status == HttpStatusCode.Forbidden &&
+         body.Contains("RESOURCE_EXHAUSTED", StringComparison.OrdinalIgnoreCase));
+
+    // Transient: Google's servers are overloaded right now. Try the next key,
+    // but don't mark this one bad — it'll likely work on the next request.
+    private static bool IsTransientError(HttpStatusCode status) =>
+        status == HttpStatusCode.BadGateway ||
+        status == HttpStatusCode.ServiceUnavailable ||
+        status == HttpStatusCode.GatewayTimeout;
 
     private string ExtractText(string raw)
     {
