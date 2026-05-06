@@ -375,8 +375,22 @@ public class GeminiAssistantService : IAssistantService
             req.Headers.Add("x-goog-api-key", _apiKeys[keyIndex]);
             req.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
-            using var resp = await _http.SendAsync(req, ct);
-            var raw = await resp.Content.ReadAsStringAsync(ct);
+            HttpResponseMessage? resp = null;
+            string raw;
+            try
+            {
+                resp = await _http.SendAsync(req, ct);
+                raw = await resp.Content.ReadAsStringAsync(ct);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+            {
+                resp?.Dispose();
+                _logger.LogError(ex, "Gemini network call failed for key #{Index}", keyIndex + 1);
+                throw new AssistantUnavailableException(
+                    $"Network error calling Gemini: {ex.GetType().Name}: {ex.Message}", ex);
+            }
+
+            using var _resp = resp;
             lastUpstreamStatus = (int)resp.StatusCode;
 
             if (resp.IsSuccessStatusCode)

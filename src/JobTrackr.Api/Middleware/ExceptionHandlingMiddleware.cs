@@ -72,6 +72,7 @@ public class ExceptionHandlingMiddleware
                 new ProblemDetails
                 {
                     Title = "An unexpected error occurred",
+                    Detail = $"{ex.GetType().Name}: {ex.Message}",
                     Status = (int)HttpStatusCode.InternalServerError,
                     Type = "https://tools.ietf.org/html/rfc7231#section-6.6.1"
                 })
