@@ -437,9 +437,16 @@ public class GeminiAssistantService : IAssistantService
 
         var first = candidates[0];
         if (first.TryGetProperty("finishReason", out var reason) &&
-            reason.GetString() is { } r && r != "STOP" && r != "MAX_TOKENS")
+            reason.GetString() is { } r)
         {
-            _logger.LogWarning("Gemini finished with reason {Reason}: {Body}", r, raw);
+            if (r == "MAX_TOKENS")
+            {
+                throw new AssistantUnavailableException(
+                    "Gemini response was truncated (hit max output tokens). " +
+                    "Increase Gemini__MaxOutputTokens or shorten the input.");
+            }
+            if (r != "STOP")
+                _logger.LogWarning("Gemini finished with reason {Reason}: {Body}", r, raw);
         }
 
         if (!first.TryGetProperty("content", out var content) ||

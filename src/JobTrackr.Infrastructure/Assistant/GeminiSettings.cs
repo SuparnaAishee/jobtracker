@@ -7,6 +7,6 @@ public class GeminiSettings
     public string? ApiKey { get; set; }
     public List<string> ApiKeys { get; set; } = new();
     public string Model { get; set; } = "gemini-2.5-flash";
-    public int MaxOutputTokens { get; set; } = 1500;
+    public int MaxOutputTokens { get; set; } = 4000;
     public double Temperature { get; set; } = 0.7;
 }
