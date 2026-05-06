@@ -31,6 +31,26 @@ if (Environment.GetEnvironmentVariable("SUPABASE_DB_HOST") is { Length: > 0 } su
         "SSL Mode=Require;Trust Server Certificate=true;Pooling=true;Maximum Pool Size=20";
 }
 
+// Map Docker-Compose-style env vars (JWT_KEY, GEMINI_API_KEY, ...) onto the
+// nested config keys ASP.NET binds (Jwt:Key, Gemini:ApiKey, ...). This lets the
+// same .env file work in Docker Compose and Render without a translation layer.
+foreach (var (envName, configKey) in new[]
+{
+    ("JWT_ISSUER", "Jwt:Issuer"),
+    ("JWT_AUDIENCE", "Jwt:Audience"),
+    ("JWT_KEY", "Jwt:Key"),
+    ("JWT_EXPIRES_IN_MINUTES", "Jwt:ExpiresInMinutes"),
+    ("GEMINI_API_KEY", "Gemini:ApiKey"),
+    ("GEMINI_MODEL", "Gemini:Model"),
+    ("GEMINI_MAX_OUTPUT_TOKENS", "Gemini:MaxOutputTokens"),
+    ("GEMINI_TEMPERATURE", "Gemini:Temperature"),
+})
+{
+    var value = Environment.GetEnvironmentVariable(envName);
+    if (!string.IsNullOrEmpty(value))
+        builder.Configuration[configKey] = value;
+}
+
 builder.Host.UseSerilog((ctx, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
     .Enrich.FromLogContext()
