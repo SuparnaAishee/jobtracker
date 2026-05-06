@@ -19,18 +19,6 @@ public class ApiFactory : WebApplicationFactory<Program>
     {
         builder.UseEnvironment("Test");
 
-        builder.ConfigureAppConfiguration((_, config) =>
-        {
-            config.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Jwt:Issuer"] = "JobTrackr.Tests",
-                ["Jwt:Audience"] = "JobTrackr.Tests.Clients",
-                ["Jwt:Key"] = "test-key-for-integration-tests-must-be-long-enough-for-hs256",
-                ["Jwt:ExpiresInMinutes"] = "60",
-                ["ConnectionStrings:Postgres"] = "Host=ignored"
-            });
-        });
-
         builder.ConfigureServices(services =>
         {
             var efDescriptors = services
