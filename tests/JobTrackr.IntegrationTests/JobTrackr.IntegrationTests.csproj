@@ -25,4 +25,8 @@
     <ProjectReference Include="..\..\src\JobTrackr.Api\JobTrackr.Api.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
 </Project>

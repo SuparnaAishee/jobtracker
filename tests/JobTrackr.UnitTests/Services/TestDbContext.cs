@@ -11,4 +11,5 @@ public class TestDbContext : DbContext, IApplicationDbContext
     public DbSet<User> Users => Set<User>();
     public DbSet<JobApplication> JobApplications => Set<JobApplication>();
     public DbSet<InterviewEvent> InterviewEvents => Set<InterviewEvent>();
+    public DbSet<Resume> Resumes => Set<Resume>();
 }

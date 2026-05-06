@@ -29,4 +29,8 @@
     <ProjectReference Include="..\..\src\JobTrackr.Infrastructure\JobTrackr.Infrastructure.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
 </Project>
