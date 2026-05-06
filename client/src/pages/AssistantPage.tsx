@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Layout } from '../components/Layout';
 import * as assistant from '../api/assistant';
+import * as resumes from '../api/resumes';
 import { HttpError } from '../api/client';
 
 export function AssistantPage() {
@@ -23,9 +24,45 @@ export function AssistantPage() {
   const [tailored, setTailored] = useState<assistant.TailorResumeResponse | null>(null);
   const [tailorError, setTailorError] = useState<string | null>(null);
 
+  const [uploadedResumes, setUploadedResumes] = useState<resumes.Resume[]>([]);
+  const [selectedResumeId, setSelectedResumeId] = useState<string>('');
+  const [resumeStatus, setResumeStatus] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
   useEffect(() => {
     assistant.status().then((s) => setConfigured(s.configured)).catch(() => setConfigured(false));
+    resumes.list().then(setUploadedResumes).catch(() => setUploadedResumes([]));
   }, []);
+
+  const pickUploaded = async (id: string) => {
+    setSelectedResumeId(id);
+    if (!id) return;
+    setResumeStatus('Extracting text…');
+    try {
+      const { text } = await resumes.getText(id);
+      setResume(text);
+      setResumeStatus(`Loaded ${text.length.toLocaleString()} characters from file.`);
+    } catch (err) {
+      setResumeStatus(`Could not extract: ${formatErr(err)}`);
+    }
+  };
+
+  const onFilePicked = async (file: File | null) => {
+    if (!file) return;
+    setUploading(true);
+    setResumeStatus(`Uploading ${file.name}…`);
+    try {
+      const created = await resumes.upload(file, file.name);
+      setUploadedResumes((prev) => [created, ...prev]);
+      await pickUploaded(created.id);
+    } catch (err) {
+      setResumeStatus(`Upload failed: ${formatErr(err)}`);
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
 
   const runAnalyze = async () => {
     setAnalyzing(true);
@@ -119,12 +156,47 @@ export function AssistantPage() {
                 className="input resize-y font-mono text-xs"
               />
             </Field>
-            <Field label="Your resume (text)">
+            <Field label="Your resume">
+              <div className="mb-2 flex flex-wrap items-center gap-2">
+                <select
+                  value={selectedResumeId}
+                  onChange={(e) => pickUploaded(e.target.value)}
+                  className="input flex-1 min-w-0"
+                >
+                  <option value="">— pick an uploaded resume —</option>
+                  {uploadedResumes.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.label || r.originalFileName}
+                    </option>
+                  ))}
+                </select>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.doc,.docx,.txt,.md,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain,text/markdown"
+                  onChange={(e) => onFilePicked(e.target.files?.[0] ?? null)}
+                  className="hidden"
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="btn-ghost"
+                >
+                  {uploading ? 'Uploading…' : 'Upload new'}
+                </button>
+              </div>
+              {resumeStatus && (
+                <p className="mb-2 text-xs text-ink-500 dark:text-ink-400">{resumeStatus}</p>
+              )}
               <textarea
                 value={resume}
-                onChange={(e) => setResume(e.target.value)}
+                onChange={(e) => {
+                  setResume(e.target.value);
+                  setSelectedResumeId('');
+                }}
                 rows={7}
-                placeholder="Paste your resume as plain text. The assistant uses this to ground its analysis."
+                placeholder="…or paste your resume as plain text. Picking or uploading a file fills this in for you."
                 className="input resize-y font-mono text-xs"
               />
             </Field>

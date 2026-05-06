@@ -23,12 +23,18 @@ public class ResumeService : IResumeService
     private readonly IApplicationDbContext _db;
     private readonly ICurrentUserService _currentUser;
     private readonly IFileStorage _storage;
+    private readonly IResumeTextExtractor _extractor;
 
-    public ResumeService(IApplicationDbContext db, ICurrentUserService currentUser, IFileStorage storage)
+    public ResumeService(
+        IApplicationDbContext db,
+        ICurrentUserService currentUser,
+        IFileStorage storage,
+        IResumeTextExtractor extractor)
     {
         _db = db;
         _currentUser = currentUser;
         _storage = storage;
+        _extractor = extractor;
     }
 
     public async Task<IReadOnlyList<ResumeDto>> ListAsync(CancellationToken ct = default)
@@ -84,6 +90,17 @@ public class ResumeService : IResumeService
 
         var stream = await _storage.OpenReadAsync(resume.StorageKey, ct);
         return (stream, resume.ContentType, resume.OriginalFileName);
+    }
+
+    public async Task<string> GetTextAsync(Guid id, CancellationToken ct = default)
+    {
+        var userId = RequireUserId();
+        var resume = await _db.Resumes.AsNoTracking()
+            .FirstOrDefaultAsync(r => r.Id == id && r.UserId == userId, ct)
+            ?? throw new NotFoundException(nameof(Resume), id);
+
+        await using var stream = await _storage.OpenReadAsync(resume.StorageKey, ct);
+        return await _extractor.ExtractAsync(stream, resume.ContentType, ct);
     }
 
     public async Task DeleteAsync(Guid id, CancellationToken ct = default)

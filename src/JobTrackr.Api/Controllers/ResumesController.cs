@@ -57,6 +57,16 @@ public class ResumesController : ControllerBase
         return File(content, contentType, fileName);
     }
 
+    /// <summary>Extract plain text from a stored resume (PDF/DOCX/TXT/MD).</summary>
+    [HttpGet("{id:guid}/text")]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ProblemDetails), StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<object>> GetText(Guid id, CancellationToken ct)
+    {
+        var text = await _service.GetTextAsync(id, ct);
+        return Ok(new { text });
+    }
+
     /// <summary>Delete a resume.</summary>
     [HttpDelete("{id:guid}")]
     [ProducesResponseType(StatusCodes.Status204NoContent)]

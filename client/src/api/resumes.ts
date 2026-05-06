@@ -29,4 +29,7 @@ export const upload = async (file: File, label: string): Promise<Resume> => {
 export const remove = (id: string) =>
   apiFetch<void>(`/api/resumes/${id}`, { method: 'DELETE' });
 
+export const getText = (id: string) =>
+  apiFetch<{ text: string }>(`/api/resumes/${id}/text`);
+
 export const downloadUrl = (id: string) => buildUrl(`/api/resumes/${id}`);
