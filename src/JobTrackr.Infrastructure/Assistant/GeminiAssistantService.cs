@@ -85,7 +85,8 @@ public class GeminiAssistantService : IAssistantService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to parse Gemini analyze response. Body: {Body}", json);
-            throw new InvalidOperationException("Assistant returned an unexpected response.");
+            throw new AssistantUnavailableException(
+                $"Assistant returned an unexpected response shape: {ex.GetType().Name}: {ex.Message}", ex);
         }
     }
 
@@ -185,7 +186,8 @@ public class GeminiAssistantService : IAssistantService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to parse interview-questions response. Body: {Body}", json);
-            throw new InvalidOperationException("Assistant returned an unexpected response.");
+            throw new AssistantUnavailableException(
+                $"Assistant returned an unexpected response shape: {ex.GetType().Name}: {ex.Message}", ex);
         }
     }
 
@@ -248,7 +250,8 @@ public class GeminiAssistantService : IAssistantService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to parse grade-answer response. Body: {Body}", json);
-            throw new InvalidOperationException("Assistant returned an unexpected response.");
+            throw new AssistantUnavailableException(
+                $"Assistant returned an unexpected response shape: {ex.GetType().Name}: {ex.Message}", ex);
         }
     }
 
@@ -304,14 +307,15 @@ public class GeminiAssistantService : IAssistantService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to parse tailor-resume response. Body: {Body}", json);
-            throw new InvalidOperationException("Assistant returned an unexpected response.");
+            throw new AssistantUnavailableException(
+                $"Assistant returned an unexpected response shape: {ex.GetType().Name}: {ex.Message}", ex);
         }
     }
 
     private void EnsureConfigured()
     {
         if (!IsConfigured)
-            throw new InvalidOperationException("GEMINI_API_KEY not set.");
+            throw new AssistantUnavailableException("GEMINI_API_KEY not set on the server.");
     }
 
     private static string? Truncate(string? input, int max) =>
@@ -413,7 +417,8 @@ public class GeminiAssistantService : IAssistantService
         if (!doc.RootElement.TryGetProperty("candidates", out var candidates) || candidates.GetArrayLength() == 0)
         {
             _logger.LogError("Gemini response had no candidates: {Body}", raw);
-            throw new InvalidOperationException("Assistant returned no candidates.");
+            throw new AssistantUnavailableException(
+                "Gemini returned no candidates (often safety/blocked content): " + raw);
         }
 
         var first = candidates[0];
@@ -427,7 +432,7 @@ public class GeminiAssistantService : IAssistantService
             !content.TryGetProperty("parts", out var parts) ||
             parts.GetArrayLength() == 0)
         {
-            throw new InvalidOperationException("Assistant returned no text content.");
+            throw new AssistantUnavailableException("Gemini response had no text content.");
         }
 
         foreach (var part in parts.EnumerateArray())
@@ -435,6 +440,6 @@ public class GeminiAssistantService : IAssistantService
             if (part.TryGetProperty("text", out var text))
                 return text.GetString() ?? "";
         }
-        throw new InvalidOperationException("Assistant returned no text part.");
+        throw new AssistantUnavailableException("Gemini response had no text part.");
     }
 }
