@@ -275,12 +275,21 @@ public class GeminiAssistantService : IAssistantService
             }
             """;
 
+        var instructionsBlock = string.IsNullOrWhiteSpace(request.Instructions)
+            ? string.Empty
+            : $"""
+
+            Additional instructions from the candidate (apply these on top of the rules above):
+            {Truncate(request.Instructions, 1000)}
+            """;
+
         var user = $"""
             Target job description:
             {Truncate(request.JobDescription, 3000)}
 
             Original resume:
             {Truncate(request.Resume, 5000)}
+            {instructionsBlock}
             """;
 
         var schema = new

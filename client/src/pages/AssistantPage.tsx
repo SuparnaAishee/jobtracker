@@ -35,6 +35,14 @@ const QUICK_FEEDBACK = [
   'Stronger opener'
 ];
 
+const QUICK_TAILOR = [
+  'More concise',
+  'Stronger metrics',
+  'Lead with the most relevant role',
+  'Drop the summary section',
+  'Match keywords harder'
+];
+
 const ANALYZE_STAGES = [
   'Reading the job description…',
   'Comparing against your resume…',
@@ -42,10 +50,10 @@ const ANALYZE_STAGES = [
   'Drafting insights…'
 ];
 
-const TAB_META: Record<Tab, { label: string; helper: string }> = {
-  fit: { label: 'Fit analysis', helper: 'Score this JD against your resume.' },
-  tailor: { label: 'Tailored resume', helper: 'Rewrite your resume for this JD.' },
-  cover: { label: 'Cover letter', helper: 'Draft & refine a cover letter.' }
+const TAB_META: Record<Tab, { label: string; helper: string; cta: string }> = {
+  fit: { label: 'Fit analysis', helper: 'Score this JD against your resume.', cta: 'Analyze fit' },
+  tailor: { label: 'Tailored resume', helper: 'Rewrite your resume for this JD.', cta: 'Tailor my resume' },
+  cover: { label: 'Cover letter', helper: 'Draft & refine a cover letter.', cta: 'Draft cover letter' }
 };
 
 export function AssistantPage() {
@@ -75,7 +83,12 @@ export function AssistantPage() {
   const [tailoring, setTailoring] = useState(false);
   const [tailored, setTailored] = useState<assistant.TailorResumeResponse | null>(null);
   const [tailorError, setTailorError] = useState<string | null>(null);
-  const [tailorView, setTailorView] = useState<'rendered' | 'raw'>('rendered');
+  const [tailorView, setTailorView] = useState<'edit' | 'preview'>('edit');
+  const [tailoredMarkdown, setTailoredMarkdown] = useState<string>('');
+  const [tailoredBaseline, setTailoredBaseline] = useState<string>('');
+  const [tailorRefining, setTailorRefining] = useState(false);
+  const [savingResume, setSavingResume] = useState(false);
+  const [saveResumeStatus, setSaveResumeStatus] = useState<string | null>(null);
 
   const [uploadedResumes, setUploadedResumes] = useState<resumes.Resume[]>([]);
 
@@ -155,9 +168,14 @@ export function AssistantPage() {
     setTailoring(true);
     setTailorError(null);
     setTailored(null);
+    setTailoredMarkdown('');
+    setTailoredBaseline('');
+    setSaveResumeStatus(null);
     try {
       const res = await assistant.tailorResume({ resume, jobDescription });
       setTailored(res);
+      setTailoredMarkdown(res.tailoredResume);
+      setTailoredBaseline(res.tailoredResume);
     } catch (err) {
       setTailorError(formatErr(err));
     } finally {
@@ -165,9 +183,48 @@ export function AssistantPage() {
     }
   };
 
+  const runTailorRefine = async (instructions: string) => {
+    if (!tailoredMarkdown.trim() || configured === false) return;
+    setTailorRefining(true);
+    setTailorError(null);
+    setSaveResumeStatus(null);
+    try {
+      const res = await assistant.tailorResume({
+        resume: tailoredMarkdown,
+        jobDescription,
+        instructions
+      });
+      setTailored(res);
+      setTailoredMarkdown(res.tailoredResume);
+      setTailoredBaseline(res.tailoredResume);
+    } catch (err) {
+      setTailorError(formatErr(err));
+    } finally {
+      setTailorRefining(false);
+    }
+  };
+
+  const saveAsResume = async (label: string) => {
+    if (!tailoredMarkdown.trim()) return;
+    setSavingResume(true);
+    setSaveResumeStatus(null);
+    try {
+      const safe = label.trim() || 'Tailored resume';
+      const fileName = `${safe.replace(/[^a-z0-9._-]+/gi, '-').replace(/^-+|-+$/g, '')}.md`;
+      const file = new File([tailoredMarkdown], fileName, { type: 'text/markdown' });
+      const created = await resumes.upload(file, safe);
+      setUploadedResumes((prev) => [created, ...prev]);
+      setSaveResumeStatus(`Saved as "${safe}". It's in the resume picker now.`);
+    } catch (err) {
+      setSaveResumeStatus(`Save failed: ${formatErr(err)}`);
+    } finally {
+      setSavingResume(false);
+    }
+  };
+
   const downloadTailored = () => {
-    if (!tailored) return;
-    const blob = new Blob([tailored.tailoredResume], { type: 'text/markdown' });
+    if (!tailoredMarkdown) return;
+    const blob = new Blob([tailoredMarkdown], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -324,12 +381,21 @@ export function AssistantPage() {
                 />
               </div>
             </div>
-            <div className="hidden items-center justify-center gap-1.5 border-t border-ink-200 px-5 py-2.5 text-[11px] text-ink-500 lg:flex dark:border-ink-800 dark:text-ink-500">
-              <kbd className="rounded border border-ink-200 bg-ink-50 px-1.5 py-0.5 font-mono text-[10px] dark:border-ink-800 dark:bg-ink-950">Ctrl</kbd>
-              <span>+</span>
-              <kbd className="rounded border border-ink-200 bg-ink-50 px-1.5 py-0.5 font-mono text-[10px] dark:border-ink-800 dark:bg-ink-950">Enter</kbd>
-              <span className="ml-1">runs the active tab</span>
-            </div>
+            <ActiveTabRunFooter
+              activeTab={activeTab}
+              missing={
+                activeTab === 'fit' ? analyzeMissing
+                : activeTab === 'tailor' ? tailorMissing
+                : letterMissing
+              }
+              busy={
+                activeTab === 'fit' ? analyzing
+                : activeTab === 'tailor' ? (tailoring || tailorRefining)
+                : drafting
+              }
+              configured={configured}
+              onRun={runActiveTab}
+            />
           </div>
         </div>
 
@@ -368,15 +434,26 @@ export function AssistantPage() {
             {activeTab === 'tailor' && (
               <TailorTab
                 tailoring={tailoring}
+                refining={tailorRefining}
                 tailored={tailored}
+                markdown={tailoredMarkdown}
+                baseline={tailoredBaseline}
+                onMarkdownChange={setTailoredMarkdown}
+                onResetToBaseline={() => setTailoredMarkdown(tailoredBaseline)}
                 error={tailorError}
                 missing={tailorMissing}
                 disabled={configured === false}
-                onRun={runTailor}
+                onRetailor={runTailor}
+                onRefine={runTailorRefine}
                 view={tailorView}
                 setView={setTailorView}
-                onCopy={() => tailored && navigator.clipboard.writeText(tailored.tailoredResume)}
+                onCopy={() => tailoredMarkdown && navigator.clipboard.writeText(tailoredMarkdown)}
                 onDownload={downloadTailored}
+                onSaveAsResume={saveAsResume}
+                savingResume={savingResume}
+                saveStatus={saveResumeStatus}
+                companyName={companyName}
+                positionName={position}
               />
             )}
             {activeTab === 'cover' && (
@@ -407,6 +484,54 @@ export function AssistantPage() {
 }
 
 /* ─────────────────────────────── tabs ─────────────────────────────── */
+
+function ActiveTabRunFooter({
+  activeTab,
+  missing,
+  busy,
+  configured,
+  onRun
+}: {
+  activeTab: Tab;
+  missing: string[];
+  busy: boolean;
+  configured: boolean | null;
+  onRun: () => void;
+}) {
+  const meta = TAB_META[activeTab];
+  const blocked = missing.length > 0 || configured === false;
+  const label = busy ? 'Working…' : meta.cta;
+  return (
+    <div className="space-y-2 border-t border-ink-200 px-5 py-4 dark:border-ink-800">
+      <button
+        onClick={onRun}
+        disabled={blocked || busy}
+        className="btn-primary w-full justify-center py-2.5 text-sm font-semibold"
+      >
+        {label}
+      </button>
+      {missing.length > 0 ? (
+        <div className="flex items-center justify-center gap-1.5 text-[11px] text-amber-700 dark:text-amber-400">
+          <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor">
+            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm-1-7V6h2v5H9zm0 4v-2h2v2H9z" clipRule="evenodd" />
+          </svg>
+          Add {missing.join(', ')}
+        </div>
+      ) : configured === false ? (
+        <div className="text-center text-[11px] text-amber-600 dark:text-amber-400">
+          AI key not configured on the server
+        </div>
+      ) : (
+        <div className="flex items-center justify-center gap-1.5 text-[11px] text-ink-500 dark:text-ink-500">
+          <kbd className="rounded border border-ink-200 bg-ink-50 px-1.5 py-0.5 font-mono text-[10px] dark:border-ink-800 dark:bg-ink-950">Ctrl</kbd>
+          <span>+</span>
+          <kbd className="rounded border border-ink-200 bg-ink-50 px-1.5 py-0.5 font-mono text-[10px] dark:border-ink-800 dark:bg-ink-950">Enter</kbd>
+          <span className="ml-1">also runs this</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 function FitTab({
   analyzing, stage, analysis, error, missing, disabled, onRun
@@ -457,19 +582,42 @@ function FitTab({
 }
 
 function TailorTab({
-  tailoring, tailored, error, missing, disabled, onRun, view, setView, onCopy, onDownload
+  tailoring, refining, tailored, markdown, baseline, onMarkdownChange, onResetToBaseline,
+  error, missing, disabled,
+  onRetailor, onRefine,
+  view, setView, onCopy, onDownload,
+  onSaveAsResume, savingResume, saveStatus,
+  companyName, positionName
 }: {
   tailoring: boolean;
+  refining: boolean;
   tailored: assistant.TailorResumeResponse | null;
+  markdown: string;
+  baseline: string;
+  onMarkdownChange: (v: string) => void;
+  onResetToBaseline: () => void;
   error: string | null;
   missing: string[];
   disabled: boolean;
-  onRun: () => void;
-  view: 'rendered' | 'raw';
-  setView: (v: 'rendered' | 'raw') => void;
+  onRetailor: () => void;
+  onRefine: (instructions: string) => void;
+  view: 'edit' | 'preview';
+  setView: (v: 'edit' | 'preview') => void;
   onCopy: () => void;
   onDownload: () => void;
+  onSaveAsResume: (label: string) => void;
+  savingResume: boolean;
+  saveStatus: string | null;
+  companyName: string;
+  positionName: string;
 }) {
+  const [refineInstr, setRefineInstr] = useState('');
+  const [confirmRetailor, setConfirmRetailor] = useState(false);
+  const [saveDialogOpen, setSaveDialogOpen] = useState(false);
+
+  const edited = markdown !== baseline && baseline.length > 0;
+  const busy = tailoring || refining;
+
   if (tailoring) {
     return (
       <div>
@@ -478,12 +626,12 @@ function TailorTab({
       </div>
     );
   }
-  if (error) {
+  if (error && !tailored) {
     return (
       <div>
         <PanelHeader title="Tailored resume" />
         <ErrorBox message={error} />
-        <RunButton label="Try again" onClick={onRun} missing={missing} disabled={disabled} />
+        <RunButton label="Try again" onClick={onRetailor} missing={missing} disabled={disabled} />
       </div>
     );
   }
@@ -492,36 +640,268 @@ function TailorTab({
       <EmptyState
         kind="tailor"
         title="Rewrite your resume for this JD"
-        body="The AI reorders and rewords bullets to surface the JD's keywords — without inventing any experience."
-        action={<RunButton label="Tailor my resume" onClick={onRun} missing={missing} disabled={disabled} primary large />}
+        body="Get a first draft from the AI, then edit the markdown directly, refine with quick instructions, and save the result as a new resume in your library."
+        action={<RunButton label="Tailor my resume" onClick={onRetailor} missing={missing} disabled={disabled} primary large />}
       />
     );
   }
+
+  const triggerRetailor = () => {
+    if (edited) setConfirmRetailor(true);
+    else onRetailor();
+  };
+
+  const submitRefine = (instr: string) => {
+    const trimmed = instr.trim();
+    if (!trimmed) return;
+    onRefine(trimmed);
+    setRefineInstr('');
+  };
+
   return (
     <div className="space-y-4">
       {tailored.changes.length > 0 && <ChangeList changes={tailored.changes} />}
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-ink-400">
-          Tailored resume
-        </span>
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-medium uppercase tracking-wide text-ink-500 dark:text-ink-400">
+            Tailored resume
+          </span>
+          {edited && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-medium text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30">
+              <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+              Edited
+            </span>
+          )}
+          <span className="text-[10px] text-ink-400 dark:text-ink-500">
+            {wordCount(markdown).toLocaleString()} words
+          </span>
+        </div>
         <div className="flex gap-1 rounded-md border border-ink-200 bg-ink-50 p-0.5 text-xs dark:border-ink-800 dark:bg-ink-950">
-          <ViewToggle active={view === 'rendered'} onClick={() => setView('rendered')}>Rendered</ViewToggle>
-          <ViewToggle active={view === 'raw'} onClick={() => setView('raw')}>Markdown</ViewToggle>
+          <ViewToggle active={view === 'edit'} onClick={() => setView('edit')}>Edit</ViewToggle>
+          <ViewToggle active={view === 'preview'} onClick={() => setView('preview')}>Preview</ViewToggle>
         </div>
       </div>
-      {view === 'rendered' ? (
-        <div className="max-h-[460px] overflow-auto rounded-md bg-ink-50 p-5 dark:bg-ink-950">
-          {renderMarkdown(tailored.tailoredResume)}
-        </div>
+
+      {view === 'edit' ? (
+        <textarea
+          value={markdown}
+          onChange={(e) => onMarkdownChange(e.target.value)}
+          className="input min-h-[460px] resize-y font-mono text-xs leading-relaxed"
+          spellCheck={false}
+          disabled={refining}
+        />
       ) : (
-        <pre className="max-h-[460px] overflow-auto whitespace-pre-wrap rounded-md bg-ink-50 p-4 font-mono text-xs text-ink-800 dark:bg-ink-950 dark:text-ink-200">
-          {tailored.tailoredResume}
-        </pre>
+        <div className="max-h-[460px] overflow-auto rounded-md bg-ink-50 p-5 dark:bg-ink-950">
+          {renderMarkdown(markdown)}
+        </div>
       )}
-      <div className="flex justify-end gap-2 border-t border-ink-200 pt-4 dark:border-ink-800">
-        <button onClick={onCopy} className="btn-ghost">Copy</button>
-        <button onClick={onDownload} className="btn-ghost">Download .md</button>
-        <RunButton label="Re-tailor" onClick={onRun} missing={missing} disabled={disabled} />
+
+      {error && tailored && <ErrorBox message={error} />}
+
+      <div className="rounded-lg border border-dashed border-ink-200 p-3 dark:border-ink-800">
+        <div className="mb-2 flex items-center gap-2 text-[11px] font-medium uppercase tracking-wide text-ink-500 dark:text-ink-400">
+          Refine with AI
+          {refining && (
+            <span className="inline-flex items-center gap-1 text-accent-600 dark:text-accent-400">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent-400 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-accent-500" />
+              </span>
+              Refining your edits
+            </span>
+          )}
+        </div>
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {QUICK_TAILOR.map((t) => (
+            <button
+              key={t}
+              onClick={() => onRefine(t)}
+              disabled={busy}
+              className="rounded-full border border-ink-200 bg-white px-2.5 py-1 text-xs text-ink-700 transition-colors hover:bg-ink-50 disabled:opacity-50 dark:border-ink-800 dark:bg-ink-900 dark:text-ink-300 dark:hover:bg-ink-800"
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <div className="flex gap-2">
+          <input
+            value={refineInstr}
+            onChange={(e) => setRefineInstr(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && refineInstr.trim() && !busy) {
+                e.preventDefault();
+                submitRefine(refineInstr);
+              }
+            }}
+            placeholder="Or describe a tweak — 'lead with my Postgres work'"
+            className="input flex-1"
+            disabled={busy}
+          />
+          <button
+            onClick={() => submitRefine(refineInstr)}
+            disabled={busy || !refineInstr.trim()}
+            className="btn-primary"
+          >
+            {refining ? 'Refining…' : 'Refine'}
+          </button>
+        </div>
+        <p className="mt-2 text-[10px] text-ink-500 dark:text-ink-500">
+          AI builds on your current edits, not the original.
+        </p>
+      </div>
+
+      {saveStatus && (
+        <div className={
+          saveStatus.startsWith('Saved')
+            ? 'rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300'
+            : 'rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-500/30 dark:bg-rose-500/10 dark:text-rose-300'
+        }>
+          {saveStatus}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-ink-200 pt-4 dark:border-ink-800">
+        <div className="flex flex-wrap gap-2">
+          {edited && (
+            <button onClick={onResetToBaseline} disabled={busy} className="btn-ghost">
+              Reset to AI output
+            </button>
+          )}
+          <button onClick={onCopy} disabled={busy} className="btn-ghost">Copy</button>
+          <button onClick={onDownload} disabled={busy} className="btn-ghost">Download .md</button>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setSaveDialogOpen(true)}
+            disabled={busy || savingResume || !markdown.trim()}
+            className="btn-ghost"
+          >
+            {savingResume ? 'Saving…' : 'Save as resume'}
+          </button>
+          <RunButton label="Re-tailor" onClick={triggerRetailor} missing={missing} disabled={disabled || busy} />
+        </div>
+      </div>
+
+      {confirmRetailor && (
+        <DialogOverlay
+          title="Discard your edits and re-tailor from scratch?"
+          body="The AI will rewrite from your original resume + JD. Your current markdown changes will be lost. Save a copy first if you want to keep them."
+          confirmLabel="Discard & re-tailor"
+          confirmTone="rose"
+          onConfirm={() => {
+            setConfirmRetailor(false);
+            onRetailor();
+          }}
+          onCancel={() => setConfirmRetailor(false)}
+        />
+      )}
+
+      {saveDialogOpen && (
+        <SaveResumeDialog
+          defaultLabel={defaultSaveLabel(companyName, positionName)}
+          saving={savingResume}
+          onSave={(label) => {
+            setSaveDialogOpen(false);
+            onSaveAsResume(label);
+          }}
+          onCancel={() => setSaveDialogOpen(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function defaultSaveLabel(company: string, position: string): string {
+  const c = company.trim();
+  const p = position.trim();
+  if (c && p) return `Resume — ${c} · ${p}`;
+  if (c) return `Resume — ${c}`;
+  if (p) return `Resume — ${p}`;
+  return 'Tailored resume';
+}
+
+function SaveResumeDialog({
+  defaultLabel,
+  saving,
+  onSave,
+  onCancel
+}: {
+  defaultLabel: string;
+  saving: boolean;
+  onSave: (label: string) => void;
+  onCancel: () => void;
+}) {
+  const [label, setLabel] = useState(defaultLabel);
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-ink-950/40 p-4 backdrop-blur-sm">
+      <div className="card w-full max-w-md p-5">
+        <div className="text-base font-semibold text-ink-900 dark:text-ink-50">Save as new resume</div>
+        <p className="mt-1 text-sm text-ink-600 dark:text-ink-400">
+          Stored as a Markdown file in your resume library, available in the picker on every page.
+        </p>
+        <div className="mt-3 space-y-1">
+          <span className="label">Resume name</span>
+          <input
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && label.trim()) onSave(label);
+              if (e.key === 'Escape') onCancel();
+            }}
+            className="input"
+            autoFocus
+          />
+        </div>
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onCancel} disabled={saving} className="btn-ghost">
+            Cancel
+          </button>
+          <button
+            onClick={() => onSave(label)}
+            disabled={saving || !label.trim()}
+            className="btn-primary"
+          >
+            {saving ? 'Saving…' : 'Save resume'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DialogOverlay({
+  title,
+  body,
+  confirmLabel,
+  confirmTone,
+  onConfirm,
+  onCancel
+}: {
+  title: string;
+  body: string;
+  confirmLabel: string;
+  confirmTone: 'rose' | 'accent';
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const cls =
+    confirmTone === 'rose'
+      ? 'inline-flex items-center justify-center gap-2 rounded-md bg-rose-600 px-4 py-2 text-sm font-semibold text-white shadow-soft transition-all duration-150 hover:bg-rose-700'
+      : 'btn-primary';
+  return (
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-ink-950/40 p-4 backdrop-blur-sm">
+      <div className="card w-full max-w-md p-5">
+        <div className="text-base font-semibold text-ink-900 dark:text-ink-50">{title}</div>
+        <p className="mt-1 text-sm text-ink-600 dark:text-ink-400">{body}</p>
+        <div className="mt-4 flex justify-end gap-2">
+          <button onClick={onCancel} className="btn-ghost">
+            Cancel
+          </button>
+          <button onClick={onConfirm} className={cls}>
+            {confirmLabel}
+          </button>
+        </div>
       </div>
     </div>
   );

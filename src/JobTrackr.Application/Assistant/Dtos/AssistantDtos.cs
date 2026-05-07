@@ -39,7 +39,7 @@ public record GradeAnswerResponse(
     IReadOnlyList<string> Improvements,
     string ModelAnswer);
 
-public record TailorResumeRequest(string Resume, string JobDescription);
+public record TailorResumeRequest(string Resume, string JobDescription, string? Instructions = null);
 
 public record TailorResumeResponse(
     string TailoredResume,

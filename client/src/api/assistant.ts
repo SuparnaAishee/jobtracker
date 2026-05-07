@@ -56,6 +56,7 @@ export interface GradeAnswerResponse {
 export interface TailorResumeRequest {
   resume: string;
   jobDescription: string;
+  instructions?: string | null;
 }
 export interface TailorResumeResponse {
   tailoredResume: string;
