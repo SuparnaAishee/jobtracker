@@ -1,9 +1,11 @@
 import { apiFetch } from './client';
 import type {
   ApplicationStatus,
+  BulkImportResult,
   CreateJobApplicationRequest,
   JobApplication,
-  PagedResult
+  PagedResult,
+  StatsResponse
 } from '../types';
 
 export interface ListQuery {
@@ -42,3 +44,11 @@ export const update = (id: string, body: CreateJobApplicationRequest) =>
 
 export const remove = (id: string) =>
   apiFetch<void>(`/api/job-applications/${id}`, { method: 'DELETE' });
+
+export const bulkImport = (items: CreateJobApplicationRequest[]) =>
+  apiFetch<BulkImportResult>('/api/job-applications/bulk', {
+    method: 'POST',
+    body: JSON.stringify({ items })
+  });
+
+export const getStats = () => apiFetch<StatsResponse>('/api/job-applications/stats');

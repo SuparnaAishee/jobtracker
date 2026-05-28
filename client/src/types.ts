@@ -39,6 +39,7 @@ export interface JobApplication {
   salaryMin: number | null;
   salaryMax: number | null;
   notes: string | null;
+  jobDescription: string | null;
   status: ApplicationStatus;
   appliedOn: string;
   createdAt: string;
@@ -63,8 +64,42 @@ export interface CreateJobApplicationRequest {
   salaryMin?: number | null;
   salaryMax?: number | null;
   notes?: string | null;
+  jobDescription?: string | null;
   status: ApplicationStatus;
   appliedOn?: string | null;
+}
+
+export interface BulkImportRowError {
+  index: number;
+  errors: string[];
+}
+
+export interface BulkImportResult {
+  total: number;
+  created: number;
+  failed: number;
+  errors: BulkImportRowError[];
+}
+
+export interface StatusBreakdownItem {
+  status: ApplicationStatus;
+  count: number;
+}
+
+export interface StatsResponse {
+  total: number;
+  byStatus: StatusBreakdownItem[];
+  funnel: {
+    saved: number;
+    applied: number;
+    screening: number;
+    interviewing: number;
+    offer: number;
+    accepted: number;
+  };
+  applicationsPerWeek: { weekStartIso: string; count: number }[];
+  offerRate: number | null;
+  interviewRate: number | null;
 }
 
 export interface ApiError {

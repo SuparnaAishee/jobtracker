@@ -70,7 +70,7 @@ public class JobApplicationService : IJobApplicationService
             .Select(j => new JobApplicationDto(
                 j.Id, j.CompanyName, j.Position, j.Location, j.JobUrl,
                 j.SalaryMin, j.SalaryMax, j.Notes, j.Status, j.AppliedOn,
-                j.CreatedAt, j.UpdatedAt))
+                j.CreatedAt, j.UpdatedAt, j.JobDescription))
             .ToListAsync(ct);
 
         return new PagedResult<JobApplicationDto>
@@ -105,13 +105,14 @@ public class JobApplicationService : IJobApplicationService
         var entity = new JobApplication
         {
             UserId = userId,
-            CompanyName = request.CompanyName.Trim(),
+            CompanyName = string.IsNullOrWhiteSpace(request.CompanyName) ? string.Empty : request.CompanyName.Trim(),
             Position = request.Position.Trim(),
             Location = request.Location?.Trim(),
             JobUrl = request.JobUrl?.Trim(),
             SalaryMin = request.SalaryMin,
             SalaryMax = request.SalaryMax,
             Notes = request.Notes?.Trim(),
+            JobDescription = request.JobDescription?.Trim(),
             Status = request.Status,
             AppliedOn = request.AppliedOn ?? DateTime.UtcNow
         };
@@ -121,6 +122,60 @@ public class JobApplicationService : IJobApplicationService
         if (_notifications is not null)
             await _notifications.NotifyApplicationChangedAsync(userId, entity.Id, ApplicationChangeKind.Created, ct);
         return Map(entity);
+    }
+
+    public async Task<BulkImportResult> BulkImportAsync(BulkImportRequest request, CancellationToken ct = default)
+    {
+        var userId = RequireUserId();
+        var items = request.Items ?? Array.Empty<CreateJobApplicationRequest>();
+
+        if (items.Count == 0)
+            throw new ValidationException(
+                new[] { new FluentValidation.Results.ValidationFailure("Items", "At least one row is required.") });
+
+        const int maxRows = 1000;
+        if (items.Count > maxRows)
+            throw new ValidationException(
+                new[] { new FluentValidation.Results.ValidationFailure("Items", $"A single import is limited to {maxRows} rows.") });
+
+        var errors = new List<BulkImportRowError>();
+        var toInsert = new List<JobApplication>();
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            var item = items[i];
+            var validation = await _createValidator.ValidateAsync(item, ct);
+            if (!validation.IsValid)
+            {
+                errors.Add(new BulkImportRowError(i, validation.Errors.Select(e => e.ErrorMessage).ToList()));
+                continue;
+            }
+
+            toInsert.Add(new JobApplication
+            {
+                UserId = userId,
+                CompanyName = string.IsNullOrWhiteSpace(item.CompanyName) ? string.Empty : item.CompanyName.Trim(),
+                Position = item.Position.Trim(),
+                Location = item.Location?.Trim(),
+                JobUrl = item.JobUrl?.Trim(),
+                SalaryMin = item.SalaryMin,
+                SalaryMax = item.SalaryMax,
+                Notes = item.Notes?.Trim(),
+                JobDescription = item.JobDescription?.Trim(),
+                Status = item.Status,
+                AppliedOn = item.AppliedOn ?? DateTime.UtcNow
+            });
+        }
+
+        if (toInsert.Count > 0)
+        {
+            _db.JobApplications.AddRange(toInsert);
+            await _db.SaveChangesAsync(ct);
+            if (_notifications is not null)
+                await _notifications.NotifyApplicationChangedAsync(userId, toInsert[0].Id, ApplicationChangeKind.Created, ct);
+        }
+
+        return new BulkImportResult(items.Count, toInsert.Count, errors.Count, errors);
     }
 
     public async Task<JobApplicationDto> UpdateAsync(Guid id, UpdateJobApplicationRequest request, CancellationToken ct = default)
@@ -135,13 +190,14 @@ public class JobApplicationService : IJobApplicationService
         if (entity is null)
             throw new NotFoundException(nameof(JobApplication), id);
 
-        entity.CompanyName = request.CompanyName.Trim();
+        entity.CompanyName = string.IsNullOrWhiteSpace(request.CompanyName) ? string.Empty : request.CompanyName.Trim();
         entity.Position = request.Position.Trim();
         entity.Location = request.Location?.Trim();
         entity.JobUrl = request.JobUrl?.Trim();
         entity.SalaryMin = request.SalaryMin;
         entity.SalaryMax = request.SalaryMax;
         entity.Notes = request.Notes?.Trim();
+        entity.JobDescription = request.JobDescription?.Trim();
         entity.Status = request.Status;
         entity.AppliedOn = request.AppliedOn;
         entity.UpdatedAt = DateTime.UtcNow;
@@ -232,5 +288,5 @@ public class JobApplicationService : IJobApplicationService
 
     private static JobApplicationDto Map(JobApplication j) =>
         new(j.Id, j.CompanyName, j.Position, j.Location, j.JobUrl, j.SalaryMin, j.SalaryMax,
-            j.Notes, j.Status, j.AppliedOn, j.CreatedAt, j.UpdatedAt);
+            j.Notes, j.Status, j.AppliedOn, j.CreatedAt, j.UpdatedAt, j.JobDescription);
 }

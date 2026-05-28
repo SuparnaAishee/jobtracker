@@ -80,6 +80,9 @@ namespace JobTrackr.Infrastructure.Persistence.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone");
 
+                    b.Property<string>("JobDescription")
+                        .HasColumnType("text");
+
                     b.Property<string>("JobUrl")
                         .HasMaxLength(2000)
                         .HasColumnType("character varying(2000)");
@@ -119,6 +122,142 @@ namespace JobTrackr.Infrastructure.Persistence.Migrations
                     b.HasIndex("UserId", "Status");
 
                     b.ToTable("job_applications", (string)null);
+                });
+
+            modelBuilder.Entity("JobTrackr.Domain.Entities.PrepAttempt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("AnswerText")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("ImprovementsJson")
+                        .HasColumnType("text");
+
+                    b.Property<string>("ModelAnswer")
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("QuestionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int?>("Score")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("StrengthsJson")
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("QuestionId", "CreatedAt");
+
+                    b.ToTable("prep_attempts", (string)null);
+                });
+
+            modelBuilder.Entity("JobTrackr.Domain.Entities.PrepQuestion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("Category")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("Difficulty")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("Mastery")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("ModelAnswer")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Order")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Question")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<Guid>("SessionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("WhyAsked")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SessionId", "Order");
+
+                    b.ToTable("prep_questions", (string)null);
+                });
+
+            modelBuilder.Entity("JobTrackr.Domain.Entities.PrepSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CompanyName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("CompletedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid?>("JobApplicationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("JobDescriptionSnapshot")
+                        .HasColumnType("text");
+
+                    b.Property<int>("Mode")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Position")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("JobApplicationId");
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.ToTable("prep_sessions", (string)null);
                 });
 
             modelBuilder.Entity("JobTrackr.Domain.Entities.Resume", b =>
@@ -233,6 +372,46 @@ namespace JobTrackr.Infrastructure.Persistence.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("JobTrackr.Domain.Entities.PrepAttempt", b =>
+                {
+                    b.HasOne("JobTrackr.Domain.Entities.PrepQuestion", "Question")
+                        .WithMany("Attempts")
+                        .HasForeignKey("QuestionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Question");
+                });
+
+            modelBuilder.Entity("JobTrackr.Domain.Entities.PrepQuestion", b =>
+                {
+                    b.HasOne("JobTrackr.Domain.Entities.PrepSession", "Session")
+                        .WithMany("Questions")
+                        .HasForeignKey("SessionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Session");
+                });
+
+            modelBuilder.Entity("JobTrackr.Domain.Entities.PrepSession", b =>
+                {
+                    b.HasOne("JobTrackr.Domain.Entities.JobApplication", "JobApplication")
+                        .WithMany()
+                        .HasForeignKey("JobApplicationId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("JobTrackr.Domain.Entities.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("JobApplication");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("JobTrackr.Domain.Entities.Resume", b =>
                 {
                     b.HasOne("JobTrackr.Domain.Entities.User", "User")
@@ -247,6 +426,16 @@ namespace JobTrackr.Infrastructure.Persistence.Migrations
             modelBuilder.Entity("JobTrackr.Domain.Entities.JobApplication", b =>
                 {
                     b.Navigation("InterviewEvents");
+                });
+
+            modelBuilder.Entity("JobTrackr.Domain.Entities.PrepQuestion", b =>
+                {
+                    b.Navigation("Attempts");
+                });
+
+            modelBuilder.Entity("JobTrackr.Domain.Entities.PrepSession", b =>
+                {
+                    b.Navigation("Questions");
                 });
 
             modelBuilder.Entity("JobTrackr.Domain.Entities.User", b =>

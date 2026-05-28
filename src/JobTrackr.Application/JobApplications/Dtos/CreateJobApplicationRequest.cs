@@ -11,4 +11,5 @@ public record CreateJobApplicationRequest(
     decimal? SalaryMax,
     string? Notes,
     ApplicationStatus Status,
-    DateTime? AppliedOn);
+    DateTime? AppliedOn,
+    string? JobDescription = null);

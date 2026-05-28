@@ -11,4 +11,5 @@ public record UpdateJobApplicationRequest(
     decimal? SalaryMax,
     string? Notes,
     ApplicationStatus Status,
-    DateTime AppliedOn);
+    DateTime AppliedOn,
+    string? JobDescription = null);

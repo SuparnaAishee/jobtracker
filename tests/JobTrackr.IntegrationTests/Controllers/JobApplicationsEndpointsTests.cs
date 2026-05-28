@@ -45,6 +45,35 @@ public class JobApplicationsEndpointsTests : IClassFixture<ApiFactory>
     }
 
     [Fact]
+    public async Task BulkImport_SavesValidRowsAndReportsInvalid()
+    {
+        var client = _factory.CreateClient();
+
+        var registerResp = await client.PostAsJsonAsync("/api/auth/register", new RegisterRequest(
+            $"user-{Guid.NewGuid():N}@example.com", "Password123!", "Bulk User"));
+        var auth = await registerResp.Content.ReadFromJsonAsync<AuthResponse>();
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth!.AccessToken);
+
+        var request = new BulkImportRequest(new[]
+        {
+            new CreateJobApplicationRequest("Acme", "Engineer", null, null, null, null, null, ApplicationStatus.Applied, null),
+            new CreateJobApplicationRequest("Globex", "", null, null, null, null, null, ApplicationStatus.Saved, null),
+            new CreateJobApplicationRequest("Globex", "Analyst", "Remote", null, null, null, null, ApplicationStatus.Saved, null)
+        });
+
+        var resp = await client.PostAsJsonAsync("/api/job-applications/bulk", request);
+        resp.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await resp.Content.ReadFromJsonAsync<BulkImportResult>();
+        result!.Total.Should().Be(3);
+        result.Created.Should().Be(2);
+        result.Failed.Should().Be(1);
+
+        var listResp = await client.GetAsync("/api/job-applications");
+        var list = await listResp.Content.ReadFromJsonAsync<PagedResponse>();
+        list!.TotalItems.Should().Be(2);
+    }
+
+    [Fact]
     public async Task GetWithoutAuth_Returns401()
     {
         var client = _factory.CreateClient();

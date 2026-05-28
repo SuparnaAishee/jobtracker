@@ -19,6 +19,7 @@ public class AssistantController : ControllerBase
 
     /// <summary>Whether the AI assistant is configured (i.e. API key is set on the server).</summary>
     [HttpGet("status")]
+    [AllowAnonymous]
     [ProducesResponseType(StatusCodes.Status200OK)]
     public IActionResult Status() =>
         Ok(new { configured = _assistant.IsConfigured });

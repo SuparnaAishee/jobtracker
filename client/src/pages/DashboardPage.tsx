@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Layout } from '../components/Layout';
 import { StatusBadge } from '../components/StatusBadge';
 import { ApplicationForm } from '../components/ApplicationForm';
+import { BulkImportPanel } from '../components/BulkImportPanel';
 import * as api from '../api/jobApplications';
-import { ApplicationStatus, StatusLabels, type JobApplication } from '../types';
+import { ApplicationStatus, StatusLabels, type JobApplication, type StatsResponse } from '../types';
 import { HttpError } from '../api/client';
 import { buildConnection, startWithRetry, type ApplicationChangedEvent } from '../realtime/notificationsHub';
 import { useAuth } from '../auth/AuthContext';
@@ -16,9 +17,11 @@ export function DashboardPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<ApplicationStatus | ''>('');
   const [showForm, setShowForm] = useState(false);
+  const [showImport, setShowImport] = useState(false);
   const [editing, setEditing] = useState<JobApplication | null>(null);
   const [liveBadge, setLiveBadge] = useState<string | null>(null);
   const liveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [stats, setStats] = useState<StatsResponse | null>(null);
   const { token } = useAuth();
 
   const load = useCallback(async () => {
@@ -39,10 +42,24 @@ export function DashboardPage() {
     }
   }, [search, statusFilter]);
 
+  // Stats reflect the full pipeline, not the filtered/paginated table — so
+  // they're fetched independently and refreshed only when applications change.
+  const loadStats = useCallback(async () => {
+    try {
+      setStats(await api.getStats());
+    } catch {
+      // Non-fatal: cards will fall back to 0 rather than blocking the page.
+    }
+  }, []);
+
   useEffect(() => {
     const t = setTimeout(load, 200);
     return () => clearTimeout(t);
   }, [load]);
+
+  useEffect(() => {
+    loadStats();
+  }, [loadStats]);
 
   // SignalR — refresh the table whenever the server tells us this user's
   // applications changed (e.g. another browser tab created/deleted one).
@@ -51,6 +68,7 @@ export function DashboardPage() {
     const conn = buildConnection();
     const onChange = (evt: ApplicationChangedEvent) => {
       load();
+      loadStats();
       setLiveBadge(`Live: ${evt.kind}`);
       if (liveTimer.current) clearTimeout(liveTimer.current);
       liveTimer.current = setTimeout(() => setLiveBadge(null), 2500);
@@ -62,32 +80,29 @@ export function DashboardPage() {
       conn.stop().catch(() => {});
       if (liveTimer.current) clearTimeout(liveTimer.current);
     };
-  }, [token, load]);
+  }, [token, load, loadStats]);
 
-  const counts = useMemo(() => {
-    const c: Record<number, number> = {};
-    for (const it of items) c[it.status] = (c[it.status] ?? 0) + 1;
-    return c;
-  }, [items]);
+  const statusCount = (s: ApplicationStatus): number =>
+    stats?.byStatus.find((b) => b.status === s)?.count ?? 0;
 
   const handleCreate = async (req: Parameters<typeof api.create>[0]) => {
     await api.create(req);
     setShowForm(false);
-    await load();
+    await Promise.all([load(), loadStats()]);
   };
 
   const handleUpdate = async (req: Parameters<typeof api.create>[0]) => {
     if (!editing) return;
     await api.update(editing.id, req);
     setEditing(null);
-    await load();
+    await Promise.all([load(), loadStats()]);
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm('Delete this application?')) return;
     try {
       await api.remove(id);
-      await load();
+      await Promise.all([load(), loadStats()]);
     } catch (err) {
       if (err instanceof HttpError) setError(err.message);
     }
@@ -116,10 +131,38 @@ export function DashboardPage() {
             )}
           </p>
         </div>
-        <button onClick={() => setShowForm((v) => !v)} className="btn-primary">
-          {showForm ? 'Close' : '+ New application'}
-        </button>
+        <div className="flex gap-3">
+          <button
+            onClick={() => {
+              setShowImport((v) => !v);
+              setShowForm(false);
+              setEditing(null);
+            }}
+            className="btn-ghost"
+          >
+            {showImport ? 'Close import' : 'Import CSV'}
+          </button>
+          <button
+            onClick={() => {
+              setShowForm((v) => !v);
+              setShowImport(false);
+            }}
+            className="btn-primary"
+          >
+            {showForm ? 'Close' : '+ New application'}
+          </button>
+        </div>
       </div>
+
+      {showImport && (
+        <BulkImportPanel
+          onImported={() => {
+            load();
+            loadStats();
+          }}
+          onClose={() => setShowImport(false)}
+        />
+      )}
 
       {showForm && !editing && (
         <div className="card mb-8 p-6">
@@ -154,7 +197,7 @@ export function DashboardPage() {
               {StatusLabels[s]}
             </div>
             <div className="mt-1 text-2xl font-semibold tabular-nums text-ink-900 dark:text-ink-50">
-              {counts[s] ?? 0}
+              {statusCount(s)}
             </div>
           </div>
         ))}
@@ -230,7 +273,7 @@ export function DashboardPage() {
                   className="transition-colors hover:bg-ink-50/60 dark:hover:bg-ink-850/60"
                 >
                   <td className="px-5 py-4 font-medium text-ink-900 dark:text-ink-100">
-                    {a.companyName}
+                    {a.companyName || <span className="italic text-ink-400 dark:text-ink-500">No company</span>}
                   </td>
                   <td className="px-5 py-4 text-ink-700 dark:text-ink-300">{a.position}</td>
                   <td className="px-5 py-4 text-ink-600 dark:text-ink-400">{a.location ?? '—'}</td>

@@ -14,4 +14,5 @@ public record JobApplicationDto(
     ApplicationStatus Status,
     DateTime AppliedOn,
     DateTime CreatedAt,
-    DateTime? UpdatedAt);
+    DateTime? UpdatedAt,
+    string? JobDescription = null);

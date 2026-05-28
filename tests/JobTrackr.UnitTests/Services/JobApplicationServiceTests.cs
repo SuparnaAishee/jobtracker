@@ -51,13 +51,59 @@ public class JobApplicationServiceTests
     }
 
     [Fact]
-    public async Task CreateAsync_BlankCompany_ThrowsValidationException()
+    public async Task CreateAsync_BlankPosition_ThrowsValidationException()
     {
         var (_, _, service, _) = Build();
         var request = new CreateJobApplicationRequest(
-            "", "Software Engineer", null, null, null, null, null, ApplicationStatus.Applied, null);
+            "Acme Corp", "", null, null, null, null, null, ApplicationStatus.Applied, null);
 
         var act = () => service.CreateAsync(request);
+
+        await act.Should().ThrowAsync<ValidationException>();
+    }
+
+    [Fact]
+    public async Task CreateAsync_BlankCompany_IsAllowed()
+    {
+        var (db, _, service, _) = Build();
+        var request = new CreateJobApplicationRequest(
+            "", "Software Engineer", null, null, null, null, null, ApplicationStatus.Applied, null);
+
+        var result = await service.CreateAsync(request);
+
+        result.CompanyName.Should().BeEmpty();
+        (await db.JobApplications.SingleAsync()).Position.Should().Be("Software Engineer");
+    }
+
+    [Fact]
+    public async Task BulkImportAsync_MixedRows_ImportsValidAndReportsInvalid()
+    {
+        var (db, _, service, userId) = Build();
+        var request = new BulkImportRequest(new[]
+        {
+            new CreateJobApplicationRequest("Acme", "Engineer", null, null, null, null, null, ApplicationStatus.Applied, null),
+            new CreateJobApplicationRequest("Globex", "", null, null, null, null, null, ApplicationStatus.Saved, null),
+            new CreateJobApplicationRequest("Globex", "Analyst", "Remote", null, null, null, null, ApplicationStatus.Saved, null)
+        });
+
+        var result = await service.BulkImportAsync(request);
+
+        result.Total.Should().Be(3);
+        result.Created.Should().Be(2);
+        result.Failed.Should().Be(1);
+        result.Errors.Should().ContainSingle().Which.Index.Should().Be(1);
+
+        var stored = await db.JobApplications.Where(j => j.UserId == userId).ToListAsync();
+        stored.Should().HaveCount(2);
+        stored.Select(s => s.CompanyName).Should().BeEquivalentTo(new[] { "Acme", "Globex" });
+    }
+
+    [Fact]
+    public async Task BulkImportAsync_EmptyList_ThrowsValidationException()
+    {
+        var (_, _, service, _) = Build();
+
+        var act = () => service.BulkImportAsync(new BulkImportRequest(Array.Empty<CreateJobApplicationRequest>()));
 
         await act.Should().ThrowAsync<ValidationException>();
     }

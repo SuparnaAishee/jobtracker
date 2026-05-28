@@ -7,11 +7,13 @@ public class UpdateJobApplicationValidator : AbstractValidator<UpdateJobApplicat
 {
     public UpdateJobApplicationValidator()
     {
-        RuleFor(x => x.CompanyName).NotEmpty().MaximumLength(200);
+        // Company name is optional — some postings don't name the company.
+        RuleFor(x => x.CompanyName).MaximumLength(200);
         RuleFor(x => x.Position).NotEmpty().MaximumLength(200);
         RuleFor(x => x.Location).MaximumLength(200);
         RuleFor(x => x.JobUrl).MaximumLength(2000);
         RuleFor(x => x.Notes).MaximumLength(4000);
+        RuleFor(x => x.JobDescription).MaximumLength(50000);
         RuleFor(x => x.SalaryMin).GreaterThanOrEqualTo(0).When(x => x.SalaryMin.HasValue);
         RuleFor(x => x.SalaryMax).GreaterThanOrEqualTo(0).When(x => x.SalaryMax.HasValue);
         RuleFor(x => x).Must(x => !x.SalaryMin.HasValue || !x.SalaryMax.HasValue || x.SalaryMax >= x.SalaryMin)

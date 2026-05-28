@@ -16,6 +16,8 @@ public class JobApplicationConfiguration : IEntityTypeConfiguration<JobApplicati
         builder.Property(j => j.Location).HasMaxLength(200);
         builder.Property(j => j.JobUrl).HasMaxLength(2000);
         builder.Property(j => j.Notes).HasMaxLength(4000);
+        // Job descriptions can be long; store as unbounded text rather than varchar(n).
+        builder.Property(j => j.JobDescription).HasColumnType("text");
         builder.Property(j => j.SalaryMin).HasColumnType("numeric(12,2)");
         builder.Property(j => j.SalaryMax).HasColumnType("numeric(12,2)");
         builder.Property(j => j.Status).HasConversion<int>();

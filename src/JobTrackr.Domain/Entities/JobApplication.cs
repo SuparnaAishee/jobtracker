@@ -15,6 +15,7 @@ public class JobApplication : BaseEntity
     public decimal? SalaryMin { get; set; }
     public decimal? SalaryMax { get; set; }
     public string? Notes { get; set; }
+    public string? JobDescription { get; set; }
 
     public ApplicationStatus Status { get; set; } = ApplicationStatus.Saved;
     public DateTime AppliedOn { get; set; } = DateTime.UtcNow;

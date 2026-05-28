@@ -12,4 +12,7 @@ public class TestDbContext : DbContext, IApplicationDbContext
     public DbSet<JobApplication> JobApplications => Set<JobApplication>();
     public DbSet<InterviewEvent> InterviewEvents => Set<InterviewEvent>();
     public DbSet<Resume> Resumes => Set<Resume>();
+    public DbSet<PrepSession> PrepSessions => Set<PrepSession>();
+    public DbSet<PrepQuestion> PrepQuestions => Set<PrepQuestion>();
+    public DbSet<PrepAttempt> PrepAttempts => Set<PrepAttempt>();
 }

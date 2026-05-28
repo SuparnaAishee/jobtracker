@@ -43,6 +43,14 @@ public class JobApplicationsController : ControllerBase
         return CreatedAtAction(nameof(GetById), new { id = created.Id }, created);
     }
 
+    /// <summary>Bulk-import job applications (e.g. from a spreadsheet). Valid rows are saved; invalid rows are reported.</summary>
+    [HttpPost("bulk")]
+    [ProducesResponseType(typeof(BulkImportResult), StatusCodes.Status200OK)]
+    [ProducesResponseType(typeof(ValidationProblemDetails), StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BulkImportResult>> BulkImport(
+        [FromBody] BulkImportRequest request, CancellationToken ct) =>
+        Ok(await _service.BulkImportAsync(request, ct));
+
     /// <summary>Update an existing job application.</summary>
     [HttpPut("{id:guid}")]
     [ProducesResponseType(typeof(JobApplicationDto), StatusCodes.Status200OK)]

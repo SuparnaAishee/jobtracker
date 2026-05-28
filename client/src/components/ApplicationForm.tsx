@@ -21,6 +21,7 @@ export function ApplicationForm({ initial, onSubmit, onCancel }: Props) {
   const [salaryMin, setSalaryMin] = useState(initial?.salaryMin?.toString() ?? '');
   const [salaryMax, setSalaryMax] = useState(initial?.salaryMax?.toString() ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
+  const [jobDescription, setJobDescription] = useState(initial?.jobDescription ?? '');
   const [status, setStatus] = useState<ApplicationStatus>(initial?.status ?? ApplicationStatus.Applied);
   const [appliedOn, setAppliedOn] = useState(
     initial?.appliedOn ? initial.appliedOn.slice(0, 10) : ''
@@ -43,6 +44,7 @@ export function ApplicationForm({ initial, onSubmit, onCancel }: Props) {
         salaryMin: salaryMin ? Number(salaryMin) : null,
         salaryMax: salaryMax ? Number(salaryMax) : null,
         notes: notes.trim() || null,
+        jobDescription: jobDescription.trim() || null,
         status,
         appliedOn: appliedOn ? new Date(appliedOn).toISOString() : null
       });
@@ -62,8 +64,8 @@ export function ApplicationForm({ initial, onSubmit, onCancel }: Props) {
   return (
     <form onSubmit={handle} className="space-y-5 animate-slide-up">
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="Company" required>
-          <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} required className="input" placeholder="Stripe" />
+        <Field label="Company">
+          <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} className="input" placeholder="Stripe (optional)" />
         </Field>
         <Field label="Position" required>
           <input value={position} onChange={(e) => setPosition(e.target.value)} required className="input" placeholder="Senior Backend Engineer" />
@@ -92,6 +94,9 @@ export function ApplicationForm({ initial, onSubmit, onCancel }: Props) {
         </Field>
         <Field label="Notes" className="sm:col-span-2">
           <textarea value={notes ?? ''} onChange={(e) => setNotes(e.target.value)} rows={3} className="input resize-y" placeholder="Referred by Sam. Phone screen next Tuesday." />
+        </Field>
+        <Field label="Job description" className="sm:col-span-2">
+          <textarea value={jobDescription ?? ''} onChange={(e) => setJobDescription(e.target.value)} rows={6} className="input resize-y" placeholder="Paste the full job description here…" />
         </Field>
       </div>
 
